@@ -1,686 +1,685 @@
 """
-Dashboard Prediksi Hasil Panen (Crop Yield Prediction)
-Disusun mengikuti alur CRISP-DM dari notebook crop_yield_crispdm.ipynb
+Dashboard Simulasi Prediksi Hasil Panen (Crop Yield Prediction)
+Memuat model & artefak dari crop_yield_crispdm.ipynb
 Author: Data Science Project - Syafiq
+Theme: White & Green Agricultural Aesthetics
 """
 
-import json
 from pathlib import Path
 
+import joblib
 import numpy as np
 import pandas as pd
-import streamlit as st
-import plotly.express as px
 import plotly.graph_objects as go
-from sklearn.linear_model import LinearRegression
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+import streamlit as st
 
-try:
-    from xgboost import XGBRegressor
-    HAS_XGB = True
-except Exception:
-    HAS_XGB = False
-
+# ─────────────────────────────────────────────────────────────────────────────
+# PAGE CONFIG
+# ─────────────────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Crop Yield Prediction Dashboard",
+    page_title="Crop Yield Prediction — Simulasi Prediksi",
     page_icon="🌾",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
-# ----------------------------------------------------------------------------
-# STYLING
-# ----------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
+# CUSTOM CSS — Fresh White & Green Agriculture Theme
+# ─────────────────────────────────────────────────────────────────────────────
 st.markdown(
     """
     <style>
-    .metric-card {
-        background-color: #f0f7f0;
-        border-radius: 10px;
-        padding: 18px;
-        border-left: 5px solid #4CAF50;
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+
+    html, body, [class*="css"] {
+        font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+        color: #1e293b;
     }
-    .block-container {padding-top: 2rem;}
-    h1, h2, h3 {color: #1b4332;}
-    .stTabs [data-baseweb="tab"] {font-size: 16px; font-weight: 600;}
+
+    .stApp {
+        background: linear-gradient(180deg, #f0fdf4 0%, #f8faf9 25%, #f4fbf6 70%, #edf7f0 100%);
+        background-attachment: fixed;
+    }
+
+    .block-container {
+        padding-top: 1.75rem;
+        padding-bottom: 2.5rem;
+        max-width: 1200px;
+    }
+
+    /* ── Hero Banner ── */
+    .hero-banner {
+        background: linear-gradient(135deg, #14532d 0%, #166534 35%, #15803d 70%, #16a34a 100%);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 22px;
+        padding: 2.5rem 3rem;
+        margin-bottom: 2rem;
+        text-align: center;
+        box-shadow: 0 16px 40px rgba(22, 101, 52, 0.22), 0 4px 12px rgba(22, 101, 52, 0.1);
+        position: relative;
+        overflow: hidden;
+    }
+    .hero-banner::before {
+        content: '';
+        position: absolute;
+        top: -50%; left: -50%;
+        width: 200%; height: 200%;
+        background: radial-gradient(circle, rgba(255,255,255,0.12) 0%, transparent 60%);
+        animation: subtle-pulse 6s ease-in-out infinite;
+    }
+    @keyframes subtle-pulse {
+        0%, 100% { transform: scale(1); opacity: 0.6; }
+        50% { transform: scale(1.08); opacity: 0.9; }
+    }
+    .hero-badge {
+        display: inline-block;
+        background: rgba(255, 255, 255, 0.18);
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(255, 255, 255, 0.35);
+        color: #f0fdf4 !important;
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        padding: 0.35rem 1rem;
+        border-radius: 50px;
+        margin-bottom: 0.75rem;
+        position: relative;
+        z-index: 1;
+    }
+    .hero-banner h1 {
+        font-size: 2.3rem;
+        font-weight: 800;
+        color: #ffffff !important;
+        letter-spacing: -0.5px;
+        margin-bottom: 0.5rem;
+        position: relative;
+        z-index: 1;
+    }
+    .hero-banner p {
+        font-size: 1.02rem;
+        color: rgba(240, 253, 244, 0.9) !important;
+        position: relative;
+        z-index: 1;
+        margin: 0;
+        line-height: 1.6;
+    }
+
+    /* ── Cards & Containers ── */
+    .agri-card {
+        background: #ffffff;
+        border: 1px solid #dcfce7;
+        border-radius: 18px;
+        padding: 1.6rem 2rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 4px 20px rgba(22, 101, 52, 0.05), 0 1px 3px rgba(0,0,0,0.02);
+        transition: all 0.3s ease;
+    }
+    .agri-card:hover {
+        border-color: #86efac;
+        box-shadow: 0 8px 30px rgba(22, 101, 52, 0.1);
+    }
+
+    .section-header {
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: #166534 !important;
+        letter-spacing: -0.2px;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .form-group-title {
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: #15803d;
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+    }
+
+    /* ── Form Inputs ── */
+    .stSelectbox label, .stNumberInput label {
+        color: #334155 !important;
+        font-size: 0.84rem !important;
+        font-weight: 600 !important;
+    }
+    div[data-baseweb="select"] > div {
+        background-color: #f8faf9 !important;
+        border-color: #d1fae5 !important;
+        border-radius: 10px !important;
+        color: #0f172a !important;
+    }
+    div[data-baseweb="select"] > div:hover {
+        border-color: #10b981 !important;
+    }
+    div[data-baseweb="input"] {
+        background-color: #f8faf9 !important;
+        border-color: #d1fae5 !important;
+        border-radius: 10px !important;
+    }
+
+    /* ── Submit Button ── */
+    div[data-testid="stFormSubmitButton"] button {
+        background: linear-gradient(135deg, #15803d 0%, #16a34a 50%, #22c55e 100%) !important;
+        color: #ffffff !important;
+        font-weight: 700 !important;
+        font-size: 1.05rem !important;
+        border: none !important;
+        border-radius: 14px !important;
+        padding: 0.85rem 2rem !important;
+        width: 100% !important;
+        letter-spacing: 0.3px !important;
+        box-shadow: 0 8px 24px rgba(22, 163, 74, 0.3) !important;
+        transition: all 0.3s ease !important;
+    }
+    div[data-testid="stFormSubmitButton"] button:hover {
+        background: linear-gradient(135deg, #166534 0%, #15803d 50%, #16a34a 100%) !important;
+        box-shadow: 0 12px 30px rgba(22, 163, 74, 0.45) !important;
+        transform: translateY(-2px) !important;
+    }
+
+    /* ── Result Cards ── */
+    .result-card {
+        background: linear-gradient(145deg, #ffffff 0%, #f0fdf4 100%);
+        border: 1.5px solid #bbf7d0;
+        border-radius: 18px;
+        padding: 1.5rem;
+        text-align: center;
+        box-shadow: 0 6px 20px rgba(22, 101, 52, 0.07);
+        transition: all 0.3s ease;
+    }
+    .result-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 12px 28px rgba(22, 101, 52, 0.14);
+        border-color: #4ade80;
+    }
+    .result-card .label {
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: #166534 !important;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 0.4rem;
+    }
+    .result-card .value {
+        font-size: 2.1rem;
+        font-weight: 800;
+        color: #14532d !important;
+        letter-spacing: -0.5px;
+        line-height: 1.15;
+    }
+    .result-card .unit {
+        font-size: 0.82rem;
+        font-weight: 500;
+        color: #64748b !important;
+        margin-top: 0.35rem;
+    }
+
+    .confidence-bar-outer {
+        background: #e2e8f0;
+        border-radius: 10px;
+        height: 8px;
+        margin-top: 0.6rem;
+        overflow: hidden;
+    }
+    .confidence-bar-inner {
+        height: 100%;
+        border-radius: 10px;
+        transition: width 1s ease;
+    }
+
+    /* ── Chart & Sub-Containers ── */
+    .chart-box {
+        background: #ffffff;
+        border: 1px solid #e2ece5;
+        border-radius: 16px;
+        padding: 1rem;
+        box-shadow: 0 2px 12px rgba(22, 101, 52, 0.04);
+        margin-bottom: 1rem;
+    }
+
+    .custom-divider {
+        height: 2px;
+        background: linear-gradient(90deg, transparent, rgba(22, 163, 74, 0.25), transparent);
+        margin: 2rem 0;
+    }
+
+    .warn-badge {
+        background: #fffbeb;
+        border: 1px solid #fde68a;
+        border-radius: 12px;
+        padding: 1rem 1.25rem;
+        color: #92400e !important;
+        font-size: 0.88rem;
+        line-height: 1.6;
+    }
+
+    .info-badge {
+        background: #f0fdf4;
+        border: 1px solid #bbf7d0;
+        border-radius: 12px;
+        padding: 1rem 1.25rem;
+        color: #166534 !important;
+        font-size: 0.88rem;
+        line-height: 1.6;
+    }
+
+    #MainMenu, footer {visibility: hidden;}
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-TRAIN_CUTOFF = 2009
-
+# ─────────────────────────────────────────────────────────────────────────────
+# PATHS
+# ─────────────────────────────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).parent
-DATA_PATH = BASE_DIR / "data" / "yield_df.csv"
-RESULTS_DIR = BASE_DIR / "results"
-FIGURES_DIR = RESULTS_DIR / "figures"
-METRICS_PATH = RESULTS_DIR / "notebook_metrics.json"
-NOTEBOOK_PATH = BASE_DIR / "crop_yield_crispdm.ipynb"
 
-# ----------------------------------------------------------------------------
-# DATA LOADING
-# ----------------------------------------------------------------------------
-@st.cache_data(show_spinner="Memuat dataset...")
-def load_data(file) -> pd.DataFrame:
-    df = pd.read_csv(file)
-    if "Unnamed: 0" in df.columns:
-        df = df.drop(columns=["Unnamed: 0"])
-    required = {
-        "Area", "Item", "Year", "hg/ha_yield",
-        "average_rain_fall_mm_per_year", "pesticides_tonnes", "avg_temp",
-    }
-    missing = required - set(df.columns)
-    if missing:
-        raise ValueError(f"Kolom berikut tidak ditemukan di file: {missing}")
-    return df
+MODEL_PATH       = BASE_DIR / "rf_model.pkl"
+BASELINE_PATH    = BASE_DIR / "baseline_map.pkl"
+GLOBAL_MEAN_PATH = BASE_DIR / "global_mean.pkl"
+ITEM_COLS_PATH   = BASE_DIR / "item_columns.pkl"
+AREA_LIST_PATH   = BASE_DIR / "area_list.pkl"
+ITEM_LIST_PATH   = BASE_DIR / "item_list.pkl"
 
+# ─────────────────────────────────────────────────────────────────────────────
+# LOAD ARTIFACTS
+# ─────────────────────────────────────────────────────────────────────────────
+@st.cache_resource(show_spinner="Memuat model Random Forest...")
+def load_model():
+    return joblib.load(MODEL_PATH)
 
-# ----------------------------------------------------------------------------
-# PREPROCESSING + FEATURE ENGINEERING (mengikuti notebook)
-# ----------------------------------------------------------------------------
-@st.cache_data(show_spinner="Menyiapkan data (preprocessing & feature engineering)...")
-def prepare_data(df: pd.DataFrame):
-    df = df.drop_duplicates().copy()
-    df["log_yield"] = np.log1p(df["hg/ha_yield"])
-
-    train_df = df[df["Year"] <= TRAIN_CUTOFF].copy()
-    test_df = df[df["Year"] > TRAIN_CUTOFF].copy()
-
-    # Baseline: rata-rata log_yield per Area+Item
-    baseline_map = train_df.groupby(["Area", "Item"])["log_yield"].mean()
-    global_mean = train_df["log_yield"].mean()
-
-    def get_baseline(data):
-        return data.apply(
-            lambda row: baseline_map.get((row["Area"], row["Item"]), global_mean),
-            axis=1,
-        )
-
-    train_df["baseline_log_pred"] = get_baseline(train_df)
-    test_df["baseline_log_pred"] = get_baseline(test_df)
-
-    train_df["residual"] = train_df["log_yield"] - train_df["baseline_log_pred"]
-    test_df["residual"] = test_df["log_yield"] - test_df["baseline_log_pred"]
-
-    FEATURES = ["Year", "average_rain_fall_mm_per_year", "pesticides_tonnes", "avg_temp"]
-
-    for data in [train_df, test_df]:
-        data["rainfall_temp"] = data["average_rain_fall_mm_per_year"] * data["avg_temp"]
-        data["pesticide_per_year"] = data["pesticides_tonnes"] / (data["Year"] - 1989 + 1)
-
-    FEATURES += ["rainfall_temp", "pesticide_per_year"]
-
-    item_train = pd.get_dummies(train_df["Item"], prefix="item")
-    item_test = pd.get_dummies(test_df["Item"], prefix="item")
-    item_test = item_test.reindex(columns=item_train.columns, fill_value=0)
-
-    X_train = pd.concat([train_df[FEATURES].reset_index(drop=True), item_train.reset_index(drop=True)], axis=1)
-    X_test = pd.concat([test_df[FEATURES].reset_index(drop=True), item_test.reset_index(drop=True)], axis=1)
-    y_train = train_df["residual"]
-    y_test = test_df["residual"]
-
-    return {
-        "df": df, "train_df": train_df, "test_df": test_df,
-        "X_train": X_train, "X_test": X_test, "y_train": y_train, "y_test": y_test,
-        "baseline_map": baseline_map, "global_mean": global_mean,
-        "item_columns": item_train.columns, "features": FEATURES,
-    }
+@st.cache_resource(show_spinner="Memuat artefak modeling...")
+def load_artifacts():
+    baseline_map = joblib.load(BASELINE_PATH)
+    global_mean  = float(joblib.load(GLOBAL_MEAN_PATH))
+    item_columns = list(joblib.load(ITEM_COLS_PATH))
+    area_list    = list(joblib.load(AREA_LIST_PATH))
+    item_list    = list(joblib.load(ITEM_LIST_PATH))
+    return baseline_map, global_mean, item_columns, area_list, item_list
 
 
-# ----------------------------------------------------------------------------
-# MODELLING
-# ----------------------------------------------------------------------------
-@st.cache_resource(show_spinner="Melatih model (Linear Regression, Random Forest, XGBoost)...")
-def train_models(_prep):
-    X_train, y_train = _prep["X_train"], _prep["y_train"]
-
-    linear_model = LinearRegression().fit(X_train, y_train)
-    rf_model = RandomForestRegressor(n_estimators=300, random_state=42, n_jobs=-1).fit(X_train, y_train)
-
-    models = {"Linear Regression": linear_model, "Random Forest": rf_model}
-
-    if HAS_XGB:
-        xgb_model = XGBRegressor(
-            n_estimators=400, max_depth=4, learning_rate=0.05,
-            subsample=0.8, colsample_bytree=0.8,
-            objective="reg:squarederror", random_state=42,
-        ).fit(X_train, y_train)
-        models["XGBoost"] = xgb_model
-
-    return models
-
-
-def to_yield(pred_residual, baseline_log_pred):
-    pred_log = baseline_log_pred.values + pred_residual
-    pred = np.expm1(pred_log)
-    return np.clip(pred, 0, None)
-
-
-@st.cache_data(show_spinner="Menghitung evaluasi model...")
-def evaluate_models(_models, _prep):
-    X_test = _prep["X_test"]
-    test_df = _prep["test_df"]
-    actual = test_df["hg/ha_yield"].values
-
-    rows = []
-    predictions = {}
-    for name, model in _models.items():
-        pred_res = model.predict(X_test)
-        pred_yield = to_yield(pred_res, test_df["baseline_log_pred"])
-        predictions[name] = pred_yield
-        rows.append({
-            "Model": name,
-            "MAE": mean_absolute_error(actual, pred_yield),
-            "RMSE": np.sqrt(mean_squared_error(actual, pred_yield)),
-            "R2": r2_score(actual, pred_yield),
-        })
-
-    # Baseline
-    baseline_pred = np.clip(np.expm1(test_df["baseline_log_pred"]), 0, None)
-    rows.append({
-        "Model": "Baseline (rata-rata Area+Item)",
-        "MAE": mean_absolute_error(actual, baseline_pred),
-        "RMSE": np.sqrt(mean_squared_error(actual, baseline_pred)),
-        "R2": r2_score(actual, baseline_pred),
-    })
-    predictions["Baseline (rata-rata Area+Item)"] = baseline_pred
-
-    results_df = pd.DataFrame(rows).sort_values("R2", ascending=False).reset_index(drop=True)
-    return results_df, predictions, actual
-
-
-def predict_yield(model, prep, area, item, year, rainfall, pesticides, avg_temp):
-    baseline = prep["baseline_map"].get((area, item), prep["global_mean"])
-
-    input_data = pd.DataFrame({
-        "Year": [year],
-        "average_rain_fall_mm_per_year": [rainfall],
-        "pesticides_tonnes": [pesticides],
-        "avg_temp": [avg_temp],
-        "rainfall_temp": [rainfall * avg_temp],
-        "pesticide_per_year": [pesticides / (year - 1989 + 1)],
-    })
-
-    item_input = pd.DataFrame(0, index=[0], columns=prep["item_columns"])
-    item_col = f"item_{item}"
-    if item_col in item_input.columns:
-        item_input[item_col] = 1
-
-    X_input = pd.concat([input_data, item_input], axis=1)
-    X_input = X_input[prep["X_train"].columns]
-
-    residual_pred = model.predict(X_input)[0]
-    log_pred = baseline + residual_pred
-    prediction = np.expm1(log_pred)
-    return max(0, prediction), (baseline == prep["global_mean"])
-
-
-# ----------------------------------------------------------------------------
-# SIDEBAR: DATA SOURCE
-# ----------------------------------------------------------------------------
-st.sidebar.title("🌾 Crop Yield Dashboard")
-st.sidebar.caption("Dataset: Kaggle - Crop Yield Prediction Dataset (`yield_df.csv`)")
-
-data_source = None
-if DATA_PATH.exists():
-    data_source = DATA_PATH
-    st.sidebar.success(f"✅ Dataset dimuat dari `data/{DATA_PATH.name}`")
-else:
-    st.sidebar.warning("⚠️ `data/yield_df.csv` tidak ditemukan di folder proyek.")
-    uploaded_file = st.sidebar.file_uploader("Upload `yield_df.csv`", type=["csv"])
-    if uploaded_file is not None:
-        data_source = uploaded_file
-
-st.sidebar.markdown("---")
-page = st.sidebar.radio(
-    "Navigasi",
-    [
-        "🏠 Business Understanding",
-        "🔎 Data Understanding",
-        "🛠️ Data Preparation",
-        "🤖 Modelling & Evaluation",
-        "🧩 Feature Importance",
-        "📁 Hasil Mining (Notebook)",
-        "🎯 Simulasi Prediksi",
-    ],
-)
-
-st.sidebar.markdown("---")
-st.sidebar.caption(
-    "Dashboard ini mereplikasi alur CRISP-DM: Business Understanding → "
-    "Data Understanding → Data Preparation → Modelling → Evaluation → "
-    "Deployment (simulasi prediksi)."
-)
-
-if data_source is None:
-    st.title("🌾 Crop Yield Prediction Dashboard")
-    st.info(
-        "Letakkan file **`yield_df.csv`** dari dataset "
-        "[Crop Yield Prediction Dataset](https://www.kaggle.com/datasets/patelris/crop-yield-prediction-dataset/data) "
-        "ke dalam folder **`data/`** proyek ini (atau upload lewat sidebar) untuk memulai."
-    )
-    st.markdown(
-        """
-        **Kolom yang dibutuhkan pada file CSV:**
-        - `Area` — wilayah/negara
-        - `Item` — jenis tanaman
-        - `Year` — tahun
-        - `hg/ha_yield` — hasil panen (hektogram per hektare)
-        - `average_rain_fall_mm_per_year` — curah hujan rata-rata
-        - `pesticides_tonnes` — penggunaan pestisida
-        - `avg_temp` — suhu rata-rata
-        """
+missing_files = [
+    p for p in [MODEL_PATH, BASELINE_PATH, GLOBAL_MEAN_PATH, ITEM_COLS_PATH, AREA_LIST_PATH, ITEM_LIST_PATH]
+    if not p.exists()
+]
+if missing_files:
+    st.error(
+        "⚠️ File artefak berikut tidak ditemukan:\n\n"
+        + "\n".join(f"- `{p.name}`" for p in missing_files)
     )
     st.stop()
 
-try:
-    df_raw = load_data(data_source)
-except Exception as e:
-    st.error(f"Gagal memuat file: {e}")
-    st.stop()
+model = load_model()
+baseline_map, global_mean, item_columns, area_list, item_list = load_artifacts()
 
-prep = prepare_data(df_raw)
-models = train_models(prep)
-results_df, predictions, actual_yield = evaluate_models(models, prep)
-best_model_name = results_df.iloc[0]["Model"]
+# ─────────────────────────────────────────────────────────────────────────────
+# PREDICTION FUNCTION
+# ─────────────────────────────────────────────────────────────────────────────
+def predict_yield(area: str, item: str, year: int,
+                  rainfall: float, pesticides: float, avg_temp: float):
+    key = (area, item)
+    if hasattr(baseline_map, 'get'):
+        baseline = baseline_map.get(key, global_mean)
+    else:
+        baseline = global_mean
+    used_global = (baseline == global_mean)
 
-# ============================================================================
-# PAGE 1: BUSINESS UNDERSTANDING
-# ============================================================================
-if page == "🏠 Business Understanding":
-    st.title("🏠 Business Understanding")
+    input_feats = pd.DataFrame({
+        "Year":                           [float(year)],
+        "average_rain_fall_mm_per_year":  [rainfall],
+        "pesticides_tonnes":              [pesticides],
+        "avg_temp":                       [avg_temp],
+        "rainfall_temp":                  [rainfall * avg_temp],
+    })
 
-    st.markdown("### Latar Belakang")
-    st.write(
-        "Produktivitas pertanian dipengaruhi oleh berbagai faktor seperti kondisi iklim, "
-        "curah hujan, suhu, penggunaan pestisida, jenis tanaman, dan wilayah. Prediksi hasil "
-        "panen dapat membantu memberikan estimasi produktivitas sehingga dapat digunakan "
-        "sebagai salah satu dasar dalam perencanaan produksi pertanian."
-    )
+    item_ohe = pd.DataFrame(0, index=[0], columns=item_columns)
+    col_key = f"item_{item}"
+    if col_key in item_ohe.columns:
+        item_ohe[col_key] = 1
 
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("### 🎯 Tujuan")
-        st.write(
-            "Membangun model untuk memprediksi hasil panen (hg/ha) berdasarkan:\n"
-            "- Wilayah (Area)\n- Jenis tanaman (Item)\n- Tahun\n"
-            "- Curah hujan\n- Penggunaan pestisida\n- Suhu rata-rata"
+    X = pd.concat([input_feats, item_ohe], axis=1)
+    residual_pred = model.predict(X)[0]
+    log_pred      = baseline + residual_pred
+    yield_hg_ha   = float(np.clip(np.expm1(log_pred), 0, None))
+
+    return yield_hg_ha, float(baseline), used_global
+
+
+def get_confidence(hg_ha: float, area: str, item: str, used_global: bool):
+    if used_global:
+        return "Sedang", 55, "#d97706"
+    baseline_hg = np.expm1(baseline_map.get((area, item), global_mean))
+    ratio = hg_ha / max(baseline_hg, 1)
+    if 0.5 <= ratio <= 2.0:
+        return "Tinggi", 90, "#16a34a"
+    elif 0.3 <= ratio <= 3.0:
+        return "Cukup", 72, "#0284c7"
+    return "Rendah", 42, "#dc2626"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HERO BANNER
+# ─────────────────────────────────────────────────────────────────────────────
+st.markdown(
+    "<div class='hero-banner'>"
+    "<div class='hero-badge'>🌱 Agrikultur & Smart Farming AI</div>"
+    "<h1>🌾 Simulasi Prediksi Hasil Panen</h1>"
+    "<p>Masukkan parameter wilayah, jenis tanaman, dan kondisi agroklimat untuk memperoleh<br>"
+    "estimasi produktivitas panen berbasis model <b>Random Forest</b> dari pipeline CRISP-DM.</p>"
+    "</div>",
+    unsafe_allow_html=True,
+)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# INPUT FORM
+# ─────────────────────────────────────────────────────────────────────────────
+st.markdown("<div class='agri-card'>", unsafe_allow_html=True)
+st.markdown("<div class='section-header'>🌿 Parameter Input Agroklimat & Komoditas</div>", unsafe_allow_html=True)
+
+with st.form("prediction_form", clear_on_submit=False):
+    col_left, col_mid, col_right = st.columns([1.2, 1.2, 1], gap="large")
+
+    with col_left:
+        st.markdown("<div class='form-group-title'>📍 Lokasi & Tanaman</div>", unsafe_allow_html=True)
+        area = st.selectbox("Wilayah (Area)", sorted(area_list), index=0,
+                            help="Pilih negara/wilayah dari data historis.")
+        item = st.selectbox("Jenis Tanaman (Item)", sorted(item_list), index=1,
+                            help="Jenis tanaman pangan yang ingin diprediksi.")
+
+    with col_mid:
+        st.markdown("<div class='form-group-title'>📅 Waktu & Suhu</div>", unsafe_allow_html=True)
+        year = st.number_input("Tahun Prediksi", min_value=1990, max_value=2100, value=2025, step=1,
+                               help="Tahun target prediksi. Model dilatih pada data 1990–2009.")
+        avg_temp = st.number_input("Suhu Rata-rata (°C)", min_value=-10.0, max_value=50.0,
+                                   value=22.0, step=0.1, format="%.1f",
+                                   help="Suhu rata-rata tahunan dalam derajat Celsius.")
+
+    with col_right:
+        st.markdown("<div class='form-group-title'>🌧️ Iklim & Input Tani</div>", unsafe_allow_html=True)
+        rainfall = st.number_input("Curah Hujan (mm/tahun)", min_value=0.0, max_value=10000.0,
+                                   value=1200.0, step=50.0, format="%.1f",
+                                   help="Total curah hujan rata-rata per tahun.")
+        pesticides = st.number_input("Pestisida (ton)", min_value=0.0, max_value=1_000_000.0,
+                                     value=5000.0, step=100.0, format="%.1f",
+                                     help="Total penggunaan pestisida dalam ton.")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    submitted = st.form_submit_button("🌱  Jalankan Simulasi Prediksi", use_container_width=True)
+
+st.markdown("</div>", unsafe_allow_html=True)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PREDICTION RESULT
+# ─────────────────────────────────────────────────────────────────────────────
+if submitted:
+    with st.spinner("Memproses prediksi..."):
+        pred_hg_ha, baseline_log, used_global = predict_yield(
+            area, item, int(year), rainfall, pesticides, avg_temp
         )
-    with col2:
-        st.markdown("### 📋 Tujuan Analisis")
-        st.write(
-            "1. Mengidentifikasi pola hasil panen.\n"
-            "2. Mengetahui kontribusi faktor terhadap prediksi yield.\n"
-            "3. Membangun model prediksi yang memiliki performa baik.\n"
-            "4. Menghasilkan simulasi prediksi sebagai decision-support sederhana."
+
+    pred_ton_ha  = pred_hg_ha / 10_000
+    baseline_hg  = np.expm1(baseline_log)
+    baseline_ton = baseline_hg / 10_000
+    delta_pct    = ((pred_hg_ha - baseline_hg) / max(baseline_hg, 1)) * 100
+
+    conf_label, conf_score, conf_color = get_confidence(pred_hg_ha, area, item, used_global)
+
+    # ── Result Cards ──────────────────────────────────────────────────────────
+    st.markdown("<div class='custom-divider'></div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-header'>📊 Hasil Simulasi Estimasi Panen</div>", unsafe_allow_html=True)
+
+    rc1, rc2, rc3, rc4 = st.columns(4, gap="medium")
+
+    with rc1:
+        st.markdown(
+            f"<div class='result-card'><div class='label'>Prediksi Yield</div>"
+            f"<div class='value'>{pred_ton_ha:,.2f}</div>"
+            f"<div class='unit'>ton / hektare</div></div>",
+            unsafe_allow_html=True,
+        )
+    with rc2:
+        st.markdown(
+            f"<div class='result-card'><div class='label'>Satuan Standar</div>"
+            f"<div class='value'>{pred_hg_ha:,.0f}</div>"
+            f"<div class='unit'>hg / ha (hektogram)</div></div>",
+            unsafe_allow_html=True,
+        )
+    with rc3:
+        sign  = "▲" if delta_pct >= 0 else "▼"
+        dcolor = "#16a34a" if delta_pct >= 0 else "#dc2626"
+        st.markdown(
+            f"<div class='result-card'><div class='label'>vs. Baseline Historis</div>"
+            f"<div class='value' style='color:{dcolor} !important;'>{sign} {abs(delta_pct):.1f}%</div>"
+            f"<div class='unit'>baseline: {baseline_ton:,.2f} ton/ha</div></div>",
+            unsafe_allow_html=True,
+        )
+    with rc4:
+        st.markdown(
+            f"<div class='result-card'><div class='label'>Tingkat Kepercayaan</div>"
+            f"<div class='value' style='color:{conf_color} !important;'>{conf_label}</div>"
+            f"<div class='confidence-bar-outer'>"
+            f"<div class='confidence-bar-inner' style='width:{conf_score}%;background:linear-gradient(90deg,{conf_color},{conf_color}bb);'></div>"
+            f"</div><div class='unit' style='margin-top:0.4rem;'>{conf_score}% skor model</div></div>",
+            unsafe_allow_html=True,
         )
 
-    st.markdown("### ⚠️ Batasan")
-    st.warning(
-        "Dataset bersifat **observasional** sehingga hubungan yang ditemukan merupakan "
-        "asosiasi dan tidak dapat langsung dianggap sebagai hubungan sebab-akibat. "
-        "Dataset juga tidak memiliki fitur agronomis penting seperti jenis tanah, dosis "
-        "pupuk per hektare, status irigasi, dan lama masa tanam — sehingga hasil prediksi "
-        "sebaiknya digunakan sebagai estimasi awal, bukan keputusan final."
-    )
+    # ── Detail + Charts ───────────────────────────────────────────────────────
+    st.markdown("<div class='custom-divider'></div>", unsafe_allow_html=True)
+    detail_col, chart_col = st.columns([1, 1.6], gap="large")
 
-    st.markdown("### 🗺️ Alur CRISP-DM Proyek")
-    steps = [
-        "1. Business Understanding", "2. Data Understanding", "3. Data Preparation",
-        "4. Modelling", "5. Evaluation", "6. Interpretation", "7. Deployment / Simulation",
-    ]
-    cols = st.columns(len(steps))
-    for c, s in zip(cols, steps):
-        c.markdown(f"<div class='metric-card' style='text-align:center'>{s}</div>", unsafe_allow_html=True)
+    with detail_col:
+        st.markdown("<div class='agri-card'>", unsafe_allow_html=True)
+        st.markdown("<div class='section-header'>📋 Ringkasan Parameter</div>", unsafe_allow_html=True)
 
-# ============================================================================
-# PAGE 2: DATA UNDERSTANDING
-# ============================================================================
-elif page == "🔎 Data Understanding":
-    st.title("🔎 Data Understanding")
+        rows_html = ""
+        for lbl, val in [
+            ("🌍 Wilayah", area), ("🌱 Jenis Tanaman", item), ("📅 Tahun", str(year)),
+            ("🌡️ Suhu", f"{avg_temp:.1f} °C"),
+            ("🌧️ Curah Hujan", f"{rainfall:,.1f} mm/thn"),
+            ("🧪 Pestisida", f"{pesticides:,.1f} ton"),
+        ]:
+            rows_html += (
+                f"<div style='display:flex;justify-content:space-between;"
+                f"padding:0.5rem 0;border-bottom:1px solid #f1f5f9;'>"
+                f"<span style='color:#64748b;font-size:0.86rem;font-weight:500;'>{lbl}</span>"
+                f"<span style='color:#0f172a;font-size:0.86rem;font-weight:700;'>{val}</span></div>"
+            )
+        st.markdown(rows_html, unsafe_allow_html=True)
 
-    df = prep["df"]
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Jumlah Baris", f"{df.shape[0]:,}")
-    c2.metric("Jumlah Kolom", f"{df.shape[1]}")
-    c3.metric("Jumlah Wilayah", f"{df['Area'].nunique()}")
-    c4.metric("Jumlah Jenis Tanaman", f"{df['Item'].nunique()}")
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("<div class='section-header'>🔗 Pipeline Dekomposisi</div>", unsafe_allow_html=True)
 
-    st.markdown("#### Cuplikan Data")
-    st.dataframe(df.head(10), use_container_width=True)
+        residual_val = np.log1p(pred_hg_ha) - baseline_log
+        pipe_html = ""
+        for lbl, val in [
+            ("Baseline log(yield)", f"{baseline_log:.4f}"),
+            ("Residual RF", f"{residual_val:+.4f}"),
+            ("Log prediksi", f"{np.log1p(pred_hg_ha):.4f}"),
+            ("Yield (hg/ha)", f"{pred_hg_ha:,.2f}"),
+        ]:
+            pipe_html += (
+                f"<div style='display:flex;justify-content:space-between;"
+                f"padding:0.4rem 0;border-bottom:1px solid #f1f5f9;'>"
+                f"<span style='color:#64748b;font-size:0.82rem;'>{lbl}</span>"
+                f"<span style='color:#15803d;font-size:0.82rem;font-weight:700;font-family:monospace;'>{val}</span></div>"
+            )
+        st.markdown(pipe_html, unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    qc1, qc2 = st.columns(2)
-    with qc1:
-        st.markdown("#### ✅ Missing Value")
-        st.dataframe(df.isnull().sum().rename("Jumlah Missing").to_frame(), use_container_width=True)
-    with qc2:
-        st.markdown("#### ✅ Data Duplikat")
-        st.metric("Jumlah baris duplikat", f"{df_raw.duplicated().sum()}")
-        st.caption("Data lengkap tanpa missing value pada notebook sumber.")
+        if used_global:
+            st.markdown(
+                f"<div class='warn-badge'>⚠️ Kombinasi <b>{area} + {item}</b> tidak ada di data "
+                "historis. Baseline menggunakan rata-rata global.</div>",
+                unsafe_allow_html=True,
+            )
 
-    st.markdown("---")
-    st.markdown("### 📊 Distribusi Hasil Panen")
-    fig = px.histogram(
-        df, x=(df["hg/ha_yield"] / 10000), nbins=50, marginal="box",
-        labels={"x": "Hasil Panen (ton/ha)"}, title="Distribusi Hasil Panen (ton/ha)",
-    )
-    fig.update_layout(xaxis_title="Hasil Panen (ton/ha)", yaxis_title="Jumlah Data")
-    st.plotly_chart(fig, use_container_width=True)
-    st.caption(
-        "Sebagian besar data memiliki hasil panen di bawah ~10 ton/ha, dengan sebagian "
-        "kecil data mencapai hingga ~50 ton/ha — distribusi menjulur ke kanan (right-skewed)."
-    )
+    with chart_col:
+        # Gauge Chart in White/Green Palette
+        fig_gauge = go.Figure(go.Indicator(
+            mode="gauge+number+delta",
+            value=pred_ton_ha,
+            delta={"reference": baseline_ton, "relative": False, "valueformat": ".2f",
+                   "suffix": " ton/ha", "font": {"size": 13, "color": "#64748b"}},
+            number={"suffix": " ton/ha", "font": {"size": 32, "color": "#14532d", "family": "Plus Jakarta Sans"},
+                    "valueformat": ",.2f"},
+            title={"text": f"<b>Estimasi Produktivitas Hasil Panen</b><br>"
+                           f"<span style='font-size:12px;color:#64748b'>{item} — {area} ({year})</span>",
+                   "font": {"size": 14, "color": "#166534", "family": "Plus Jakarta Sans"}},
+            gauge={
+                "axis": {"range": [0, max(pred_ton_ha * 2.5, 20)],
+                         "tickwidth": 1, "tickcolor": "#cbd5e1",
+                         "tickfont": {"color": "#64748b", "size": 11}},
+                "bar": {"color": "#16a34a", "thickness": 0.28},
+                "bgcolor": "#f8faf9", "borderwidth": 1, "bordercolor": "#e2e8f0",
+                "steps": [
+                    {"range": [0, pred_ton_ha * 0.4],  "color": "#fee2e2"},
+                    {"range": [pred_ton_ha * 0.4, pred_ton_ha * 0.75], "color": "#fef3c7"},
+                    {"range": [pred_ton_ha * 0.75, pred_ton_ha * 1.25], "color": "#dcfce7"},
+                    {"range": [pred_ton_ha * 1.25, max(pred_ton_ha * 2.5, 20)], "color": "#e0f2fe"},
+                ],
+                "threshold": {"line": {"color": "#d97706", "width": 3},
+                              "thickness": 0.75, "value": baseline_ton},
+            },
+        ))
+        fig_gauge.update_layout(
+            paper_bgcolor="#ffffff", plot_bgcolor="#ffffff",
+            height=280, margin=dict(l=25, r=25, t=55, b=10),
+            font={"family": "Plus Jakarta Sans"},
+        )
+        st.markdown("<div class='chart-box'>", unsafe_allow_html=True)
+        st.plotly_chart(fig_gauge, use_container_width=True, config={"displayModeBar": False})
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("### 🌾 Rata-rata Hasil Panen per Jenis Tanaman")
-    yield_item = (df.groupby("Item")["hg/ha_yield"].mean().sort_values() / 10000).reset_index()
-    yield_item.columns = ["Item", "ton_per_ha"]
-    fig2 = px.bar(
-        yield_item, x="ton_per_ha", y="Item", orientation="h",
-        title="Rata-rata Hasil Panen Berdasarkan Jenis Tanaman",
-        labels={"ton_per_ha": "Rata-rata Hasil Panen (ton/ha)", "Item": ""},
-        color="ton_per_ha", color_continuous_scale="Greens",
-    )
-    fig2.update_layout(height=max(400, 25 * len(yield_item)), coloraxis_showscale=False)
-    st.plotly_chart(fig2, use_container_width=True)
+        # Comparison bar chart
+        fig_bar = go.Figure()
+        for lbl, val, color in [
+            ("Baseline Historis", baseline_ton, "#0284c7"),
+            ("Prediksi Model", pred_ton_ha, "#16a34a"),
+        ]:
+            fig_bar.add_trace(go.Bar(
+                x=[lbl], y=[val], marker_color=color, marker_line_width=0,
+                text=[f"{val:,.2f} t/ha"], textposition="outside",
+                textfont={"color": "#0f172a", "size": 12, "family": "Plus Jakarta Sans"},
+                width=0.38,
+            ))
+        fig_bar.update_layout(
+            paper_bgcolor="#ffffff", plot_bgcolor="#f8faf9",
+            showlegend=False, height=240, margin=dict(l=10, r=10, t=15, b=10),
+            yaxis={"gridcolor": "#e2ece5",
+                   "tickfont": {"color": "#64748b", "size": 11},
+                   "title": {"text": "ton/ha", "font": {"color": "#64748b", "size": 11}}},
+            xaxis={"tickfont": {"color": "#1e293b", "size": 12}},
+            font={"family": "Plus Jakarta Sans"},
+        )
+        st.markdown("<div class='chart-box'>", unsafe_allow_html=True)
+        st.plotly_chart(fig_bar, use_container_width=True, config={"displayModeBar": False})
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("### 🌍 15 Wilayah dengan Rata-rata Hasil Panen Tertinggi")
-    rata_area = (
-        df.groupby("Area")["hg/ha_yield"].mean().sort_values(ascending=False).head(15) / 10000
-    ).sort_values().reset_index()
-    rata_area.columns = ["Area", "ton_per_ha"]
-    fig3 = px.bar(
-        rata_area, x="ton_per_ha", y="Area", orientation="h",
-        title="15 Wilayah dengan Rata-rata Hasil Panen Tertinggi",
-        labels={"ton_per_ha": "Rata-rata Hasil Panen (ton/ha)", "Area": ""},
-        color="ton_per_ha", color_continuous_scale="Blues",
-    )
-    fig3.update_layout(coloraxis_showscale=False)
-    st.plotly_chart(fig3, use_container_width=True)
-
-    st.markdown("### 🔥 Korelasi Variabel Numerik")
-    numeric_cols = ["Year", "hg/ha_yield", "average_rain_fall_mm_per_year", "pesticides_tonnes", "avg_temp"]
-    corr = df[numeric_cols].corr()
-    fig4 = px.imshow(
-        corr, text_auto=".2f", color_continuous_scale="RdBu_r", zmin=-1, zmax=1,
-        title="Korelasi Variabel Numerik",
-    )
-    st.plotly_chart(fig4, use_container_width=True)
-    st.caption(
-        "Korelasi linear antar variabel numerik terhadap hasil panen tergolong lemah "
-        "(curah hujan ≈0.00, pestisida ≈0.06, suhu ≈-0.11) — mengindikasikan hubungan "
-        "yang tidak sepenuhnya linear, sehingga model non-linear seperti Random Forest "
-        "berpotensi menangkap pola lebih baik."
-    )
-
-# ============================================================================
-# PAGE 3: DATA PREPARATION
-# ============================================================================
-elif page == "🛠️ Data Preparation":
-    st.title("🛠️ Data Preparation")
-
-    st.markdown("### 1️⃣ Transformasi Log pada Target")
-    st.write(
-        "`hg/ha_yield` memiliki rentang nilai yang sangat lebar sehingga ditransformasi "
-        "menjadi `log_yield = log1p(hg/ha_yield)` agar skala lebih terkendali untuk pemodelan."
-    )
-    df = prep["df"]
-    col1, col2 = st.columns(2)
-    with col1:
-        fig = px.histogram(df, x=df["hg/ha_yield"] / 10000, nbins=30, title="Sebelum Transformasi")
-        fig.update_layout(xaxis_title="Hasil Panen (ton/ha)")
-        st.plotly_chart(fig, use_container_width=True)
-    with col2:
-        fig = px.histogram(df, x="log_yield", nbins=30, title="Setelah Transformasi Log")
-        fig.update_layout(xaxis_title="Log Hasil Panen")
-        st.plotly_chart(fig, use_container_width=True)
-
-    st.markdown("### 2️⃣ Split Data Berdasarkan Tahun")
-    st.write(
-        f"Data dibagi berdasarkan tahun agar evaluasi mendekati kondisi nyata (model belajar "
-        f"dari masa lalu untuk memprediksi masa depan): **Train ≤ {TRAIN_CUTOFF}**, "
-        f"**Test > {TRAIN_CUTOFF}**."
-    )
-    c1, c2 = st.columns(2)
-    c1.metric("Data Train", f"{prep['train_df'].shape[0]:,} baris",
-               f"{prep['train_df']['Year'].min()}–{prep['train_df']['Year'].max()}")
-    c2.metric("Data Test", f"{prep['test_df'].shape[0]:,} baris",
-               f"{prep['test_df']['Year'].min()}–{prep['test_df']['Year'].max()}")
-
-    st.markdown("### 3️⃣ Baseline Prediction (Area + Item)")
-    st.write(
-        "Dibuat prediksi baseline sederhana berupa rata-rata `log_yield` per kombinasi "
-        "`Area` + `Item`. Model machine learning nantinya memprediksi **residual** (selisih "
-        "dari baseline ini), bukan nilai yield secara langsung — sehingga model fokus "
-        "mempelajari koreksi dari baseline."
-    )
-    st.dataframe(prep["train_df"]["residual"].describe().to_frame("residual (train)"), use_container_width=True)
-
-    st.markdown("### 4️⃣ Feature Engineering")
-    st.write(
-        "- `rainfall_temp` = curah hujan × suhu rata-rata (interaksi iklim)\n"
-        "- `pesticide_per_year` = pestisida dibagi lama periode tahun sejak 1990\n"
-        "- `Item` diubah menjadi one-hot encoding"
-    )
-    st.markdown(f"**Total fitur akhir:** {prep['X_train'].shape[1]} kolom "
-                f"({prep['X_train'].shape[0]:,} baris train, {prep['X_test'].shape[0]:,} baris test)")
-    st.dataframe(prep["X_train"].head(), use_container_width=True)
-
-# ============================================================================
-# PAGE 4: MODELLING & EVALUATION
-# ============================================================================
-elif page == "🤖 Modelling & Evaluation":
-    st.title("🤖 Modelling & Evaluation")
-
+    # ── Sensitivity Analysis ──────────────────────────────────────────────────
+    st.markdown("<div class='custom-divider'></div>", unsafe_allow_html=True)
     st.markdown(
-        "Tiga algoritma dilatih pada data yang sama untuk memprediksi **residual** dari "
-        "baseline: **Linear Regression**, **Random Forest**, dan **XGBoost**"
-        + ("" if HAS_XGB else " *(XGBoost tidak tersedia di environment ini, dilewati)*") + "."
+        "<div class='section-header'>📈 Analisis Sensitivitas Agroklimat — Pengaruh Variabel terhadap Prediksi</div>",
+        unsafe_allow_html=True,
     )
 
-    st.markdown("### 📈 Perbandingan Metrik Evaluasi")
-    fmt_df = results_df.copy()
-    fmt_df["MAE"] = fmt_df["MAE"].map(lambda v: f"{v:,.2f}")
-    fmt_df["RMSE"] = fmt_df["RMSE"].map(lambda v: f"{v:,.2f}")
-    fmt_df["R2"] = fmt_df["R2"].map(lambda v: f"{v:.4f}")
-    st.dataframe(fmt_df, use_container_width=True, hide_index=True)
+    def sweep(param, values, fixed):
+        results = []
+        for v in values:
+            p = dict(fixed)
+            p[param] = v
+            hg, _, _ = predict_yield(p["area"], p["item"], int(p["year"]),
+                                     p["rainfall"], p["pesticides"], p["avg_temp"])
+            results.append(hg / 10_000)
+        return results
 
-    best_row = results_df.iloc[0]
-    st.success(
-        f"🏆 **Model terbaik: {best_row['Model']}** — R² = {best_row['R2']:.4f} "
-        f"({best_row['R2']*100:.2f}%), MAE = {best_row['MAE']:,.2f} hg/ha"
-    )
+    fixed = dict(area=area, item=item, year=year,
+                 rainfall=rainfall, pesticides=pesticides, avg_temp=avg_temp)
 
-    mcol1, mcol2 = st.columns(2)
-    with mcol1:
-        fig = px.bar(
-            results_df, x="Model", y="R2", title="Perbandingan R² Antar Model",
-            color="R2", color_continuous_scale="Greens", text_auto=".4f",
+    def line_chart(x_vals, y_vals, vline_val, xlabel, title, color, fillcolor):
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=x_vals, y=y_vals, mode="lines", fill="tozeroy",
+            line=dict(color=color, width=2.5), fillcolor=fillcolor, name="Yield",
+        ))
+        fig.add_vline(x=vline_val, line_dash="dash", line_color="#d97706", line_width=2,
+                      annotation_text=f"Input: {vline_val}", annotation_font_color="#b45309",
+                      annotation_font_size=11)
+        fig.update_layout(
+            title=dict(text=title, font=dict(color="#166534", size=13), x=0),
+            paper_bgcolor="#ffffff", plot_bgcolor="#f8faf9",
+            height=240, margin=dict(l=10, r=10, t=40, b=10),
+            xaxis=dict(title=xlabel, tickfont=dict(color="#64748b", size=11),
+                       gridcolor="#e2ece5"),
+            yaxis=dict(title="Yield (ton/ha)", tickfont=dict(color="#64748b", size=11),
+                       gridcolor="#e2ece5"),
+            showlegend=False, font=dict(family="Plus Jakarta Sans"),
         )
-        fig.update_layout(coloraxis_showscale=False)
-        st.plotly_chart(fig, use_container_width=True)
-    with mcol2:
-        fig = px.bar(
-            results_df, x="Model", y="MAE", title="Perbandingan MAE Antar Model",
-            color="MAE", color_continuous_scale="Reds", text_auto=".2s",
+        return fig
+
+    s1, s2 = st.columns(2, gap="large")
+    with s1:
+        rain_x = np.linspace(max(0, rainfall * 0.2), rainfall * 2.5, 40)
+        st.markdown("<div class='chart-box'>", unsafe_allow_html=True)
+        st.plotly_chart(
+            line_chart(rain_x, sweep("rainfall", rain_x, fixed), rainfall,
+                       "Curah Hujan (mm/thn)", "🌧️ Respon terhadap Curah Hujan",
+                       "#0284c7", "rgba(2, 132, 199, 0.08)"),
+            use_container_width=True, config={"displayModeBar": False}
         )
-        fig.update_layout(coloraxis_showscale=False)
-        st.plotly_chart(fig, use_container_width=True)
-
-    st.markdown("---")
-    st.markdown("### 🎯 Actual vs Predicted")
-    model_choice = st.selectbox(
-        "Pilih model untuk divisualisasikan:",
-        [m for m in results_df["Model"] if m != "Baseline (rata-rata Area+Item)"],
-    )
-    pred = predictions[model_choice]
-    actual_ton = actual_yield / 10000
-    pred_ton = pred / 10000
-
-    scatter_df = pd.DataFrame({"Aktual (ton/ha)": actual_ton, "Prediksi (ton/ha)": pred_ton})
-    fig = px.scatter(
-        scatter_df, x="Aktual (ton/ha)", y="Prediksi (ton/ha)", opacity=0.4,
-        title=f"Hasil Panen Aktual vs Prediksi — {model_choice}",
-    )
-    lim = [0, max(scatter_df.max()) * 1.05]
-    fig.add_trace(go.Scatter(x=lim, y=lim, mode="lines", line=dict(dash="dash", color="red"), name="Prediksi Sempurna"))
-    st.plotly_chart(fig, use_container_width=True)
-    st.caption("Semakin dekat titik-titik dengan garis putus-putus merah, semakin akurat prediksi model.")
-
-# ============================================================================
-# PAGE 5: FEATURE IMPORTANCE
-# ============================================================================
-elif page == "🧩 Feature Importance":
-    st.title("🧩 Feature Importance")
-
-    tree_models = {k: v for k, v in models.items() if hasattr(v, "feature_importances_")}
-    if not tree_models:
-        st.info("Tidak ada model berbasis tree yang tersedia untuk feature importance.")
-    else:
-        model_choice = st.selectbox("Pilih model:", list(tree_models.keys()))
-        model = tree_models[model_choice]
-        importance_df = pd.DataFrame({
-            "Fitur": prep["X_train"].columns,
-            "Importance": model.feature_importances_,
-        }).sort_values("Importance", ascending=False).head(15)
-
-        fig = px.bar(
-            importance_df.sort_values("Importance"), x="Importance", y="Fitur", orientation="h",
-            title=f"Top 15 Feature Importance — {model_choice}",
-            color="Importance", color_continuous_scale="Viridis",
+        st.markdown("</div>", unsafe_allow_html=True)
+    with s2:
+        temp_x = np.linspace(max(-5, avg_temp - 15), avg_temp + 15, 40)
+        st.markdown("<div class='chart-box'>", unsafe_allow_html=True)
+        st.plotly_chart(
+            line_chart(temp_x, sweep("avg_temp", temp_x, fixed), avg_temp,
+                       "Suhu (°C)", "🌡️ Respon terhadap Suhu Rata-rata",
+                       "#ea580c", "rgba(234, 88, 12, 0.08)"),
+            use_container_width=True, config={"displayModeBar": False}
         )
-        fig.update_layout(coloraxis_showscale=False, height=500)
-        st.plotly_chart(fig, use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-        st.caption(
-            "Feature importance menunjukkan seberapa besar kontribusi setiap fitur dalam "
-            "membantu model mengoreksi prediksi baseline (residual). Pada notebook sumber, "
-            "analisis SHAP menunjukkan `Year`, `pesticides_tonnes`, `pesticide_per_year`, "
-            "jenis tanaman jagung (Maize), dan `rainfall_temp` sebagai fitur paling berpengaruh."
+    s3, s4 = st.columns(2, gap="large")
+    with s3:
+        pest_x = np.linspace(0, max(pesticides * 3, 10000), 40)
+        st.markdown("<div class='chart-box'>", unsafe_allow_html=True)
+        st.plotly_chart(
+            line_chart(pest_x, sweep("pesticides", pest_x, fixed), pesticides,
+                       "Pestisida (ton)", "🧪 Respon terhadap Penggunaan Pestisida",
+                       "#7c3aed", "rgba(124, 58, 237, 0.08)"),
+            use_container_width=True, config={"displayModeBar": False}
         )
+        st.markdown("</div>", unsafe_allow_html=True)
+    with s4:
+        year_x = list(range(2010, 2051))
+        st.markdown("<div class='chart-box'>", unsafe_allow_html=True)
+        st.plotly_chart(
+            line_chart(year_x, sweep("year", year_x, fixed), year,
+                       "Tahun", "📅 Proyeksi Tren Waktu (Tahun)",
+                       "#16a34a", "rgba(22, 163, 74, 0.08)"),
+            use_container_width=True, config={"displayModeBar": False}
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
 
-# ============================================================================
-# PAGE 6: HASIL MINING DARI NOTEBOOK (arsip)
-# ============================================================================
-elif page == "📁 Hasil Mining (Notebook)":
-    st.title("📁 Hasil Mining Data (dari Notebook Asli)")
-    st.write(
-        "Halaman ini menampilkan **output asli** dari `crop_yield_crispdm.ipynb` yang sudah "
-        "dijalankan sebelumnya (gambar & metrik tersimpan di folder `results/`) — sebagai arsip "
-        "hasil eksperimen, berdampingan dengan hasil training *live* di halaman lain."
-    )
-
-    if NOTEBOOK_PATH.exists():
-        with open(NOTEBOOK_PATH, "rb") as f:
-            st.download_button(
-                "⬇️ Download Notebook Asli (crop_yield_crispdm.ipynb)",
-                data=f,
-                file_name="crop_yield_crispdm.ipynb",
-                mime="application/x-ipynb+json",
-                use_container_width=True,
-            )
-    else:
-        st.info("File `crop_yield_crispdm.ipynb` tidak ditemukan di folder proyek.")
-
-    if METRICS_PATH.exists():
-        with open(METRICS_PATH) as f:
-            nb_metrics = json.load(f)
-
-        st.markdown("### 📊 Metrik Evaluasi (hasil run notebook)")
-        nb_results_df = pd.DataFrame(nb_metrics["results"])
-        nb_results_df.columns = ["Model", "MAE", "RMSE", "R2"]
-        st.dataframe(nb_results_df, use_container_width=True, hide_index=True)
-        st.success(f"🏆 Model terbaik pada notebook: **{nb_metrics['best_model']}**")
-
-        with st.expander("🔍 Contoh simulasi prediksi dari notebook"):
-            ex = nb_metrics["example_prediction"]
-            st.json(ex)
-
-        st.caption(nb_metrics.get("notes", ""))
-    else:
-        st.warning("File `results/notebook_metrics.json` tidak ditemukan.")
-
-    st.markdown("---")
-    st.markdown("### 🖼️ Visualisasi Asli dari Notebook")
-
-    figure_captions = {
-        "01_distribusi_yield.png": "Distribusi Hasil Panen (sebelum transformasi)",
-        "02_rata_rata_per_item.png": "Rata-rata Hasil Panen per Jenis Tanaman",
-        "03_top15_wilayah.png": "15 Wilayah dengan Rata-rata Hasil Panen Tertinggi",
-        "04_korelasi_numerik.png": "Korelasi Variabel Numerik",
-        "05_before_after_log.png": "Perbandingan Sebelum vs Sesudah Transformasi Log",
-        "06_actual_vs_predicted_rf.png": "Actual vs Predicted — Random Forest",
-    }
-
-    if FIGURES_DIR.exists():
-        images = sorted(FIGURES_DIR.glob("*.png"))
-        if images:
-            cols = st.columns(2)
-            for idx, img_path in enumerate(images):
-                caption = figure_captions.get(img_path.name, img_path.stem)
-                with cols[idx % 2]:
-                    st.image(str(img_path), caption=caption, use_container_width=True)
-        else:
-            st.info("Belum ada gambar tersimpan di `results/figures/`.")
-    else:
-        st.info("Folder `results/figures/` tidak ditemukan.")
-
-# ============================================================================
-# PAGE 7: SIMULASI PREDIKSI
-# ============================================================================
-elif page == "🎯 Simulasi Prediksi":
-    st.title("🎯 Simulasi Prediksi Hasil Panen")
-    st.write(
-        "Masukkan kondisi wilayah, tanaman, dan iklim untuk mendapatkan estimasi hasil panen. "
-        "Model memprediksi **residual** terhadap baseline (rata-rata historis Area+Item), lalu "
-        "hasilnya dikembalikan ke skala hg/ha."
-    )
-
-    df = prep["df"]
-    with st.form("prediction_form"):
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            area = st.selectbox("Wilayah (Area)", sorted(df["Area"].unique()))
-            item = st.selectbox("Jenis Tanaman (Item)", sorted(df["Item"].unique()))
-        with c2:
-            year = st.number_input("Tahun", min_value=1990, max_value=2100, value=2024, step=1)
-            avg_temp = st.number_input("Suhu Rata-rata (°C)", value=20.0, step=0.1, format="%.1f")
-        with c3:
-            rainfall = st.number_input("Curah Hujan (mm/tahun)", min_value=0.0, value=1500.0, step=10.0)
-            pesticides = st.number_input("Penggunaan Pestisida (ton)", min_value=0.0, value=100.0, step=1.0)
-
-        model_choice = st.selectbox("Model untuk prediksi:", list(models.keys()), index=list(models.keys()).index(best_model_name) if best_model_name in models else 0)
-        submitted = st.form_submit_button("🔮 Prediksi Hasil Panen", use_container_width=True)
-
-    if submitted:
-        model = models[model_choice]
-        pred_hg, used_global_mean = predict_yield(model, prep, area, item, int(year), rainfall, pesticides, avg_temp)
-        pred_ton = pred_hg / 10000
-
-        st.markdown("### 📊 Hasil Prediksi")
-        r1, r2 = st.columns(2)
-        r1.metric("Prediksi Hasil Panen", f"{pred_hg:,.2f} hg/ha")
-        r2.metric("Setara", f"{pred_ton:,.2f} ton/ha")
-
-        if used_global_mean:
-            st.warning(
-                f"Kombinasi **{area} + {item}** tidak ditemukan pada data historis (train). "
-                "Prediksi menggunakan rata-rata global sebagai baseline, sehingga akurasinya "
-                "bisa lebih rendah dibanding kombinasi yang sudah pernah terlihat oleh model."
-            )
-        else:
-            hist_mean = prep["baseline_map"].get((area, item))
-            hist_ton = np.expm1(hist_mean) / 10000
-            st.caption(f"Rata-rata historis {area} + {item} pada data train: ~{hist_ton:,.2f} ton/ha")
-
-    st.markdown("---")
-    st.markdown("### ⚠️ Catatan Keterbatasan Model")
-    st.info(
-        "Dataset ini tidak memiliki fitur agronomis penting seperti **jenis tanah, dosis "
-        "pupuk per hektare, status irigasi, dan lama masa tanam**. Hasil prediksi di atas "
-        "adalah estimasi berbasis pola historis (Area, Item, Tahun, Curah Hujan, Pestisida, "
-        "Suhu) dan sebaiknya digunakan sebagai referensi awal, bukan keputusan final."
-    )
-
-st.markdown("---")
-st.caption("Dashboard dibuat berdasarkan notebook `crop_yield_crispdm.ipynb` — Crop Yield Prediction Project (CRISP-DM).")
+# ─────────────────────────────────────────────────────────────────────────────
+# DISCLAIMER & FOOTER
+# ─────────────────────────────────────────────────────────────────────────────
+st.markdown("<div class='custom-divider'></div>", unsafe_allow_html=True)
+st.markdown(
+    "<div class='info-badge'>"
+    "🌾 <b>Catatan Agrikultur & Keterbatasan Model:</b> Model Random Forest dilatih menggunakan data historis "
+    "global FAO/WorldBank (1990–2013). Model tidak memperhitungkan variabel mikro-agronomi lokal seperti varietas benih unggul, "
+    "kandungan hara tanah (NPK), dan sistem irigasi teknis. Gunakan estimasi ini sebagai panduan proyeksi makro."
+    "</div>",
+    unsafe_allow_html=True,
+)
+st.markdown(
+    "<div style='text-align:center;color:#64748b;font-size:0.8rem;margin-top:1.5rem;font-weight:500;'>"
+    "🌱 Crop Yield Prediction Dashboard · Smart Agriculture AI · "
+    "<code style='color:#166534;background:#dcfce7;padding:2px 6px;border-radius:4px;'>crop_yield_crispdm.ipynb</code></div>",
+    unsafe_allow_html=True,
+)
