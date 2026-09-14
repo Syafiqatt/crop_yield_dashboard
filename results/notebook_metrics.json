@@ -1,0 +1,24 @@
+{
+  "train_cutoff_year": 2009,
+  "dataset_shape": {"rows": 28242, "columns": 8},
+  "train_shape": {"rows": 23233, "columns": 8},
+  "test_shape": {"rows": 5009, "columns": 8},
+  "results": [
+    {"model": "Baseline (rata-rata Area+Item)", "mae": 18581.48, "rmse": null, "r2": 0.8781},
+    {"model": "Linear Regression", "mae": 14520.59, "rmse": 26670.67, "r2": 0.9221},
+    {"model": "XGBoost", "mae": 12839.31, "rmse": 24312.76, "r2": 0.9352},
+    {"model": "Random Forest", "mae": 10591.88, "rmse": 21294.82, "r2": 0.9503}
+  ],
+  "best_model": "Random Forest",
+  "example_prediction": {
+    "area": "Albania",
+    "item": "Maize",
+    "year": 2024,
+    "rainfall_mm": 1500,
+    "pesticides_tonnes": 100,
+    "avg_temp": 16,
+    "predicted_yield_hg_ha": 38896.69,
+    "predicted_yield_ton_ha": 3.89
+  },
+  "notes": "Metrics ini adalah hasil run asli dari notebook crop_yield_crispdm.ipynb. Dashboard juga melatih ulang model secara live dari data/yield_df.csv sehingga angka bisa sedikit berbeda tergantung versi library, namun pola perbandingan antar model (Random Forest > XGBoost > Linear Regression > Baseline) seharusnya tetap konsisten."
+}
