@@ -142,7 +142,7 @@ with st.container():
         temp = st.number_input("5. Suhu Rata-rata (°C)", value=16.37, step=0.1, format="%.2f")
         pesticide = st.number_input("6. Penggunaan Pestisida (Ton)", value=121.0, step=1.0)
 
-        submitted = st.form_submit_button("🚀 Jalankan Analisis & Simulasi", use_container_width=True)
+        submitted = st.form_submit_button("Jalankan Prediksi", use_container_width=True)
 
 item_raw = CROP_REVERSE.get(item_indo, item_indo)
 
