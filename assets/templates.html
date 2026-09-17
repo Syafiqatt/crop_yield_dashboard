@@ -1,0 +1,60 @@
+<!--
+    Crop Yield Dashboard - HTML Templates
+    Dipisah dari app.py, dimuat & diisi lewat utils.render_template()
+    Setiap blok ditandai penanda BLOCK/END (lihat contoh di bawah)
+    dan boleh berisi placeholder Jinja2 seperti {{ variabel }}
+-->
+
+<!-- BLOCK:hero -->
+<div class="hero-banner">
+    <div class="hero-text-container"> 
+
+        <div class="hero-badge">              
+            <span class="hero-badge-icon">🌱</span>
+            AGRIKULTUR &amp; SMART FARMING AI
+        </div>
+
+        <h1 class="hero-title">
+            🌾 Simulasi Prediksi Hasil Panen
+        </h1>
+
+        <p class="hero-subtitle">
+            Masukkan parameter wilayah, jenis tanaman, dan kondisi agroklimat untuk memperoleh
+            estimasi produktivitas panen berbasis model
+            <strong>Random Forest</strong> dari pipeline <strong>CRISP-DM</strong>.
+        </p>
+
+    </div>
+</div>
+<!-- END:hero -->
+
+<!-- BLOCK:section_title -->
+<div class="section-title">{{ number }}. {{ icon }} {{ title }}</div>
+<!-- END:section_title -->
+
+<!-- BLOCK:metric_card -->
+<div class="metric-box {{ box_class }}">
+    <span class="metric-title">{{ title }}</span>
+    <span class="metric-value">{{ value }}</span>
+</div>
+<!-- END:metric_card -->
+
+<!-- BLOCK:sensitivity_card -->
+<div class="sens-card">
+    <div class="sens-title">{{ title }}</div>
+    <div class="sens-val">
+        {{ value }} <small style="font-size:0.75rem;font-weight:normal;">ton/ha</small>
+        <span class="sens-badge {{ badge_class }}">({{ sign }}{{ diff }}%)</span>
+    </div>
+</div>
+<!-- END:sensitivity_card -->
+
+<!-- BLOCK:dss_banner -->
+<div class="dss-banner">
+    <h4>💡 Rekomendasi Keputusan (Decision Support System)</h4>
+    <p>
+        Berdasarkan kondisi iklim (Suhu <b>{{ temp }}°C</b> &amp; Curah Hujan <b>{{ rain }} mm</b>) di <b>{{ area }}</b>:<br>
+        👉 Komoditas <b class="highlight-crop">{{ top_crop }}</b> diprediksi paling produktif &amp; cocok dengan potensi <b>{{ top_yield }} ton/ha</b>.
+    </p>
+</div>
+<!-- END:dss_banner -->
