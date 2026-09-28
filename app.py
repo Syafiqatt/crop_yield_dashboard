@@ -203,37 +203,36 @@ for col, (title, val, diff) in zip((s1, s2, s3), scenarios):
 # ─────────────────────────────────────────────────────────────────────────────
 # OUTPUT 3 — PERANGKINGAN KOMODITAS & DSS
 # ─────────────────────────────────────────────────────────────────────────────
-rank_df = pd.DataFrame(rankings).sort_values("yield_ton", ascending=False)
+st.markdown(
+    render_template(TPL_PATH, "section_title", number="3", icon="🏆",
+                     title="Perangkingan Komoditas & Decision Support System (DSS)"),
+    unsafe_allow_html=True,
+)
 
+rankings = []
+for raw_c in raw_item_list:
+    ton_c, _ = predict_single(area, raw_c, year, rain, temp, pesticide)
+    rankings.append({"crop": CROP_TRANSLATION.get(raw_c, raw_c), "yield_ton": round(ton_c, 2)})
+rankings.sort(key=lambda x: x["yield_ton"], reverse=True)
+top_crop, top_yield = rankings[0]["crop"], rankings[0]["yield_ton"]
+
+st.markdown(render_template(
+    TPL_PATH, "dss_banner",
+    temp=f"{temp:.2f}", rain=f"{rain:,.0f}", area=area,
+    top_crop=top_crop, top_yield=f"{top_yield:,.2f}",
+), unsafe_allow_html=True)
+
+rank_df = pd.DataFrame(rankings).sort_values("yield_ton")  # ascending, biar terbesar di atas saat horizontal
 fig = go.Figure(go.Bar(
-    x=rank_df["crop"],
-    y=rank_df["yield_ton"],
-    marker=dict(
-        color="rgba(129, 199, 132, 0.85)",
-        line=dict(color="#2E7D32", width=1.5)
-    ),
-    text=rank_df["yield_ton"].round(2),
-    textposition="outside",
+    x=rank_df["yield_ton"], y=rank_df["crop"], orientation="h",
+    marker=dict(color="rgba(129, 199, 132, 0.85)", line=dict(color="#2E7D32", width=1.5)),
 ))
-
 fig.update_layout(
-    height=450,
-    margin=dict(l=10, r=20, t=30, b=80),
-    paper_bgcolor="#ffffff",
-    plot_bgcolor="#ffffff",
-    xaxis=dict(
-        title="Komoditas",
-        tickfont=dict(size=12),
-    ),
-    yaxis=dict(
-        title="Hasil Panen (ton/ha)",
-        gridcolor="#e2e8f0",
-    ),
+    height=380, margin=dict(l=10, r=20, t=10, b=10),
+    paper_bgcolor="#ffffff", plot_bgcolor="#ffffff",
+    xaxis=dict(title="Hasil Panen (ton/ha)", gridcolor="#e2e8f0"),
+    yaxis=dict(tickfont=dict(size=12)),
     font=dict(family="Outfit"),
 )
+st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-st.plotly_chart(
-    fig,
-    use_container_width=True,
-    config={"displayModeBar": False}
-)
