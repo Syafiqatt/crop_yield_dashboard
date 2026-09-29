@@ -51,7 +51,7 @@ CROP_REVERSE = {v: k for k, v in CROP_TRANSLATION.items()}
 # PAGE CONFIG + CSS EKSTERNAL
 # ─────────────────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="AgriSmart — Simulasi Prediksi Hasil Panen",
+    page_title="Smart Harvest Planner — Simulasi Prediksi Hasil Panen",
     page_icon=str(LOGO_PATH) if LOGO_PATH.exists() else "🌾",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -137,7 +137,8 @@ with st.container():
         
         area = st.selectbox("1. Wilayah (Negara)", area_list, index=default_area_idx)
         item_indo = st.selectbox("2. Komoditas Utama", items_indo, index=default_item_idx)
-        year = st.slider("3. Tahun Pengamatan/Proyeksi:", 1990, 2030, 2013)
+        years_list = list(range(2027, 2046))
+        year = st.selectbox("3. Tahun Proyeksi:", options=years_list, index=0)
         rain = st.number_input("4. Curah Hujan (mm/tahun)", value=1485.0, step=10.0)
         temp = st.number_input("5. Suhu Rata-rata (°C)", value=16.37, step=0.1, format="%.2f")
         pesticide = st.number_input("6. Penggunaan Pestisida (Ton)", value=121.0, step=1.0)
