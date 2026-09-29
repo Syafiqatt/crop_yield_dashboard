@@ -1,69 +1,125 @@
-# 🌾 Crop Yield Prediction Dashboard
+﻿# 🌾 Smart Harvest Planner
 
-Dashboard Streamlit interaktif yang mereplikasi alur **CRISP-DM** dari notebook
-`crop_yield_crispdm.ipynb`: Business Understanding → Data Understanding →
-Data Preparation → Modelling → Evaluation → Deployment (simulasi prediksi).
+Aplikasi web interaktif berbasis **Streamlit** untuk memprediksi hasil panen (crop yield) berdasarkan kondisi agroklimat yang dimasukkan pengguna. Model prediksi dibangun menggunakan algoritma **Random Forest** dan dikembangkan mengikuti alur metodologi **CRISP-DM** di notebook `crop_yield_crispdm.ipynb`.
 
 Dataset sumber: [Crop Yield Prediction Dataset (Kaggle)](https://www.kaggle.com/datasets/patelris/crop-yield-prediction-dataset/data)
+
+---
 
 ## Struktur Folder
 
 ```
-crop_dashboard/
-├── app.py
-├── requirements.txt
+crop_yield_dashboard/
+├── app.py                        ← Logika utama aplikasi Streamlit
+├── utils.py                      ← Helper: load CSS, render HTML template
+├── requirements.txt              ← Daftar dependency Python
 ├── README.md
-├── crop_yield_crispdm.ipynb   ← notebook asli (bisa didownload dari dashboard)
+├── crop_yield_crispdm.ipynb      ← Notebook CRISP-DM (eksplorasi & training model)
+├── assets/
+│   ├── style.css                 ← Seluruh styling CSS halaman
+│   ├── templates.html            ← Komponen HTML (hero banner, kartu metrik, DSS)
+│   ├── logo.png                  ← Logo aplikasi (ukuran besar)
+│   └── logo_small.png            ← Logo aplikasi (favicon / ukuran kecil)
 ├── data/
-│   └── yield_df.csv          ← taruh dataset di sini
-└── results/
-    ├── notebook_metrics.json  ← metrik hasil run notebook asli
-    └── figures/                ← grafik hasil mining dari notebook asli
-        ├── 01_distribusi_yield.png
-        ├── 02_rata_rata_per_item.png
-        ├── 03_top15_wilayah.png
-        ├── 04_korelasi_numerik.png
-        ├── 05_before_after_log.png
-        └── 06_actual_vs_predicted_rf.png
+│   └── yield_df.csv              ← Dataset historis hasil panen (dari Kaggle)
+└── models/
+    └── rf_model.pkl              ← Model Random Forest yang sudah dilatih (via notebook)
 ```
+
+---
 
 ## Cara Menjalankan
 
-1. Install dependency:
-   ```bash
-   pip install -r requirements.txt
-   ```
+### 1. Clone atau unduh repository ini
 
-2. Download dataset dari Kaggle, lalu letakkan `yield_df.csv` di dalam
-   folder `data/` (jika folder ini kosong, dashboard tetap bisa dipakai
-   lewat opsi upload manual di sidebar).
+```bash
+git clone <url-repository>
+cd crop_yield_dashboard
+```
 
-3. Jalankan aplikasi:
-   ```bash
-   streamlit run app.py
-   ```
+### 2. Install dependency
 
-4. Browser akan terbuka otomatis (biasanya di `http://localhost:8501`).
-   Dashboard akan otomatis membaca `data/yield_df.csv` tanpa perlu upload lagi.
+Disarankan menggunakan virtual environment:
 
-## Struktur Halaman
+```bash
+python -m venv .venv
+.venv\Scripts\activate        # Windows
+source .venv/bin/activate     # Mac/Linux
 
-| Halaman | Isi |
+pip install -r requirements.txt
+```
+
+### 3. Pastikan file berikut tersedia
+
+| File | Lokasi | Keterangan |
+|---|---|---|
+| `yield_df.csv` | `data/yield_df.csv` | Dataset historis dari Kaggle |
+| `rf_model.pkl` | `models/rf_model.pkl` | Model hasil training di notebook |
+
+> **Penting:** File `rf_model.pkl` harus dihasilkan terlebih dahulu dengan menjalankan seluruh cell di `crop_yield_crispdm.ipynb` hingga bagian **Deployment**. Model akan tersimpan otomatis ke folder `models/`.
+
+### 4. Jalankan aplikasi
+
+```bash
+streamlit run app.py
+```
+
+Browser akan terbuka otomatis di `http://localhost:8501`.
+
+---
+
+## Cara Menggunakan Aplikasi
+
+Aplikasi terdiri dari satu halaman utama dengan tiga bagian output:
+
+### 📝 Form Input Parameter
+Isi enam parameter berikut, lalu klik **"Jalankan Prediksi"**:
+
+| No. | Parameter | Keterangan |
+|---|---|---|
+| 1 | **Wilayah (Negara)** | Pilih negara dari daftar yang tersedia |
+| 2 | **Komoditas Utama** | Pilih jenis tanaman (10 komoditas tersedia) |
+| 3 | **Tahun Proyeksi** | Pilih tahun masa depan (2027 – 2045) |
+| 4 | **Curah Hujan (mm/tahun)** | Rata-rata curah hujan tahunan |
+| 5 | **Suhu Rata-rata (°C)** | Rata-rata suhu tahunan |
+| 6 | **Penggunaan Pestisida (Ton)** | Total pestisida yang digunakan |
+
+### 📊 Output 1 — Prediksi Utama
+Menampilkan estimasi hasil panen untuk komoditas yang dipilih dalam satuan **ton/ha** dan **hg/ha** (standar FAO), disertai informasi lokasi dan tahun proyeksi.
+
+### 🔍 Output 2 — Analisis Sensitivitas
+Menampilkan simulasi tiga skenario perubahan kondisi iklim secara otomatis:
+- Suhu naik +1°C
+- Curah hujan turun -10%
+- Pestisida naik +20%
+
+Setiap skenario menampilkan estimasi yield baru dan persentase perubahan dibandingkan prediksi utama.
+
+### 🏆 Output 3 — Perangkingan & Decision Support System (DSS)
+Menjalankan prediksi untuk **semua 10 komoditas** secara bersamaan lalu merangkingnya, dan memberikan rekomendasi komoditas paling produktif untuk kondisi yang dimasukkan, dilengkapi grafik batang horizontal.
+
+---
+
+## Komoditas yang Didukung
+
+| Nama Indonesia | Nama Inggris (kode model) |
 |---|---|
-| 🏠 Business Understanding | Latar belakang, tujuan, dan batasan proyek |
-| 🔎 Data Understanding | Ringkasan dataset, distribusi yield, top crop/wilayah, korelasi |
-| 🛠️ Data Preparation | Transformasi log, split train/test berbasis tahun, baseline, feature engineering |
-| 🤖 Modelling & Evaluation | Perbandingan Linear Regression / Random Forest / XGBoost (MAE, RMSE, R²), actual vs predicted |
-| 🧩 Feature Importance | Fitur paling berpengaruh dari model berbasis tree |
-| 📁 Hasil Mining (Notebook) | Arsip gambar & metrik hasil run asli dari `crop_yield_crispdm.ipynb` |
-| 🎯 Simulasi Prediksi | Form input interaktif untuk memprediksi hasil panen pada kondisi baru |
+| Jagung | Maize |
+| Kentang | Potatoes |
+| Padi | Rice, paddy |
+| Sorgum | Sorghum |
+| Kedelai | Soybeans |
+| Gandum | Wheat |
+| Singkong / Ubi Kayu | Cassava |
+| Ubi | Yams |
+| Ubi Jalar | Sweet potatoes |
+| Pisang & Lainnya | Plantains and others |
 
-## Catatan
+---
 
-- Model dilatih **saat aplikasi pertama kali dijalankan** (hasil di-cache oleh
-  Streamlit dengan `@st.cache_resource`, jadi hanya lambat di run pertama).
-- Pendekatan modelling: model memprediksi **residual** terhadap baseline
-  rata-rata `log_yield` per kombinasi Area+Item (sama seperti di notebook),
-  bukan memprediksi yield secara langsung.
-- Jika `xgboost` tidak berhasil ter-install di environment kamu, dashboard
-  tetap berjalan normal dengan Linear Regression & Random Forest saja.
+## Catatan Teknis
+
+- **Model tidak dilatih ulang saat aplikasi dijalankan.** File `rf_model.pkl` sudah berisi model yang terlatih. Aplikasi hanya memuat model tersebut menggunakan `joblib.load` — proses ini di-cache oleh Streamlit (`@st.cache_resource`) sehingga hanya berjalan sekali saat pertama kali dibuka.
+- **Pendekatan prediksi:** Model memprediksi *residual* terhadap baseline rata-rata `log_yield` per kombinasi Area + Item. Hasil akhir dikembalikan ke satuan asli menggunakan `expm1`.
+- **Pemisahan kode:** CSS ada di `assets/style.css`, komponen HTML di `assets/templates.html`, dan `app.py` hanya berisi logika Python. Helper untuk membaca keduanya ada di `utils.py`.
+- **Data referensi** (`baseline_map`, `area_list`, `item_columns`) dihitung langsung dari `yield_df.csv` saat runtime — tidak ada file `.pkl` tambahan selain model.
