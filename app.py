@@ -51,7 +51,7 @@ CROP_REVERSE = {v: k for k, v in CROP_TRANSLATION.items()}
 # PAGE CONFIG + CSS EKSTERNAL
 # ─────────────────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Smart Harvest Planner — Simulasi Prediksi Hasil Panen",
+    page_title="Smart Harvest Planner — Prediksi Hasil Panen",
     page_icon=str(LOGO_PATH) if LOGO_PATH.exists() else "🌾",
     layout="wide",
     initial_sidebar_state="collapsed",
