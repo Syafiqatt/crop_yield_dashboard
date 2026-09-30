@@ -34,16 +34,16 @@ LOGO_PATH  = BASE_DIR / "assets" / "logo_small.png"
 BANNER_PATH = BASE_DIR / "assets" / "header_banner.png"
 
 CROP_TRANSLATION = {
-    "Maize": "Jagung (Maize)",
-    "Potatoes": "Kentang (Potatoes)",
-    "Rice, paddy": "Padi (Rice, paddy)",
-    "Sorghum": "Sorgum (Sorghum)",
-    "Soybeans": "Kedelai (Soybeans)",
-    "Wheat": "Gandum (Wheat)",
-    "Cassava": "Singkong / Ubi Kayu (Cassava)",
-    "Yams": "Ubi (Yams)",
-    "Sweet potatoes": "Ubi Jalar (Sweet potatoes)",
-    "Plantains and others": "Pisang & Lainnya (Plantains)",
+    "Maize": "Jagung",
+    "Potatoes": "Kentang",
+    "Rice, paddy": "Padi",
+    "Sorghum": "Sorgum",
+    "Soybeans": "Kedelai",
+    "Wheat": "Gandum",
+    "Cassava": "Singkong / Ubi Kayu",
+    "Yams": "Ubi",
+    "Sweet potatoes": "Ubi Jalar",
+    "Plantains and others": "Pisang & Lainnya",
 }
 CROP_REVERSE = {v: k for k, v in CROP_TRANSLATION.items()}
 
@@ -147,93 +147,142 @@ with st.container():
 
 item_raw = CROP_REVERSE.get(item_indo, item_indo)
 
-# ─────────────────────────────────────────────────────────────────────────────
-# OUTPUT 1 — PREDIKSI UTAMA
-# ─────────────────────────────────────────────────────────────────────────────
-y_ton, y_hg = predict_single(area, item_raw, year, rain, temp, pesticide)
-
-st.markdown(
-    render_template(TPL_PATH, "section_title", number="1", icon="📊", title="Prediksi Utama Komoditas Pilihan"),
-    unsafe_allow_html=True,
-)
-c1, c2, c3 = st.columns(3)
-with c1:
-    st.markdown(render_template(TPL_PATH, "metric_card", box_class="green-box",
-                                 title="Estimasi Hasil Panen", value=f"{y_ton:,.2f} ton/ha"), unsafe_allow_html=True)
-with c2:
-    st.markdown(render_template(TPL_PATH, "metric_card", box_class="blue-box",
-                                 title="Satuan Standar FAO", value=f"{y_hg:,.0f} hg/ha"), unsafe_allow_html=True)
-with c3:
-    st.markdown(render_template(TPL_PATH, "metric_card", box_class="info-box",
-                                 title="Lokasi & Tahun", value=f"{area} ({year})"), unsafe_allow_html=True)
+# Tandai bahwa form sudah pernah disubmit menggunakan session_state
+if submitted:
+    st.session_state["prediction_done"] = True
+    st.session_state["pred_params"] = {
+        "area": area, "item_raw": item_raw, "item_indo": item_indo,
+        "year": year, "rain": rain, "temp": temp, "pesticide": pesticide,
+    }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# OUTPUT 2 — ANALISIS SENSITIVITAS
+# TAMPILKAN HASIL HANYA JIKA PREDIKSI SUDAH PERNAH DIJALANKAN
 # ─────────────────────────────────────────────────────────────────────────────
-st.markdown(
-    render_template(TPL_PATH, "section_title", number="2", icon="🔍",
-                     title="Analisis Sensitivitas Iklim & Pestisida (Uji Skenario)"),
-    unsafe_allow_html=True,
-)
+if st.session_state.get("prediction_done"):
+    p = st.session_state["pred_params"]
+    area      = p["area"]
+    item_raw  = p["item_raw"]
+    year      = p["year"]
+    rain      = p["rain"]
+    temp      = p["temp"]
+    pesticide = p["pesticide"]
 
-y_temp_up, _ = predict_single(area, item_raw, year, rain, temp + 1.0, pesticide)
-d_temp = ((y_temp_up - y_ton) / y_ton * 100) if y_ton > 0 else 0.0
+    # ── OUTPUT 1 — PREDIKSI UTAMA ────────────────────────────────────────────
+    y_ton, y_hg = predict_single(area, item_raw, year, rain, temp, pesticide)
 
-y_rain_down, _ = predict_single(area, item_raw, year, rain * 0.9, temp, pesticide)
-d_rain = ((y_rain_down - y_ton) / y_ton * 100) if y_ton > 0 else 0.0
+    st.markdown(
+        render_template(TPL_PATH, "section_title", number="1", icon="📊", title="Prediksi Utama Komoditas Pilihan"),
+        unsafe_allow_html=True,
+    )
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.markdown(render_template(TPL_PATH, "metric_card", box_class="green-box",
+                                     title="Estimasi Hasil Panen", value=f"{y_ton:,.2f} ton/ha"), unsafe_allow_html=True)
+    with c2:
+        st.markdown(render_template(TPL_PATH, "metric_card", box_class="blue-box",
+                                     title="Satuan Standar FAO", value=f"{y_hg:,.0f} hg/ha"), unsafe_allow_html=True)
+    with c3:
+        st.markdown(render_template(TPL_PATH, "metric_card", box_class="info-box",
+                                     title="Lokasi & Tahun", value=f"{area} ({year})"), unsafe_allow_html=True)
 
-y_pest_up, _ = predict_single(area, item_raw, year, rain, temp, pesticide * 1.2)
-d_pest = ((y_pest_up - y_ton) / y_ton * 100) if y_ton > 0 else 0.0
+    # ── OUTPUT 2 — ANALISIS SENSITIVITAS ─────────────────────────────────────
+    st.markdown(
+        render_template(TPL_PATH, "section_title", number="2", icon="🔍",
+                         title="Analisis Sensitivitas Iklim & Pestisida (Uji Skenario)"),
+        unsafe_allow_html=True,
+    )
 
-scenarios = [
-    ("🌡️ Suhu Naik (+1°C)", y_temp_up, d_temp),
-    ("🌧️ Hujan Turun (-10%)", y_rain_down, d_rain),
-    ("🧪 Pestisida Naik (+20%)", y_pest_up, d_pest),
-]
-s1, s2, s3 = st.columns(3)
-for col, (title, val, diff) in zip((s1, s2, s3), scenarios):
-    with col:
-        st.markdown(render_template(
-            TPL_PATH, "sensitivity_card",
-            title=title, value=f"{val:,.2f}",
-            badge_class="badge-pos" if diff >= 0 else "badge-neg",
-            sign="+" if diff >= 0 else "",
-            diff=f"{diff:.2f}",
-        ), unsafe_allow_html=True)
+    y_temp_up, _ = predict_single(area, item_raw, year, rain, temp + 1.0, pesticide)
+    d_temp = ((y_temp_up - y_ton) / y_ton * 100) if y_ton > 0 else 0.0
 
-# ─────────────────────────────────────────────────────────────────────────────
-# OUTPUT 3 — PERANGKINGAN KOMODITAS & DSS
-# ─────────────────────────────────────────────────────────────────────────────
-st.markdown(
-    render_template(TPL_PATH, "section_title", number="3", icon="🏆",
-                     title="Perangkingan Komoditas & Decision Support System (DSS)"),
-    unsafe_allow_html=True,
-)
+    y_rain_down, _ = predict_single(area, item_raw, year, rain * 0.9, temp, pesticide)
+    d_rain = ((y_rain_down - y_ton) / y_ton * 100) if y_ton > 0 else 0.0
 
-rankings = []
-for raw_c in raw_item_list:
-    ton_c, _ = predict_single(area, raw_c, year, rain, temp, pesticide)
-    rankings.append({"crop": CROP_TRANSLATION.get(raw_c, raw_c), "yield_ton": round(ton_c, 2)})
-rankings.sort(key=lambda x: x["yield_ton"], reverse=True)
-top_crop, top_yield = rankings[0]["crop"], rankings[0]["yield_ton"]
+    y_pest_up, _ = predict_single(area, item_raw, year, rain, temp, pesticide * 1.2)
+    d_pest = ((y_pest_up - y_ton) / y_ton * 100) if y_ton > 0 else 0.0
 
-st.markdown(render_template(
-    TPL_PATH, "dss_banner",
-    temp=f"{temp:.2f}", rain=f"{rain:,.0f}", area=area,
-    top_crop=top_crop, top_yield=f"{top_yield:,.2f}",
-), unsafe_allow_html=True)
+    scenarios = [
+        ("🌡️ Suhu Naik (+1°C)", y_temp_up, d_temp),
+        ("🌧️ Hujan Turun (-10%)", y_rain_down, d_rain),
+        ("🧪 Pestisida Naik (+20%)", y_pest_up, d_pest),
+    ]
+    s1, s2, s3 = st.columns(3)
+    for col, (title, val, diff) in zip((s1, s2, s3), scenarios):
+        with col:
+            st.markdown(render_template(
+                TPL_PATH, "sensitivity_card",
+                title=title, value=f"{val:,.2f}",
+                badge_class="badge-pos" if diff >= 0 else "badge-neg",
+                sign="+" if diff >= 0 else "",
+                diff=f"{diff:.2f}",
+            ), unsafe_allow_html=True)
 
-rank_df = pd.DataFrame(rankings).sort_values("yield_ton")  # ascending, biar terbesar di atas saat horizontal
-fig = go.Figure(go.Bar(
-    x=rank_df["yield_ton"], y=rank_df["crop"], orientation="h",
-    marker=dict(color="rgba(129, 199, 132, 0.85)", line=dict(color="#2E7D32", width=1.5)),
-))
-fig.update_layout(
-    height=380, margin=dict(l=10, r=20, t=10, b=10),
-    paper_bgcolor="#ffffff", plot_bgcolor="#ffffff",
-    xaxis=dict(title="Hasil Panen (ton/ha)", gridcolor="#e2e8f0"),
-    yaxis=dict(tickfont=dict(size=12)),
-    font=dict(family="Outfit"),
-)
-st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    # ── OUTPUT 3 — PERANGKINGAN KOMODITAS & DSS ───────────────────────────────
+    st.markdown(
+        render_template(TPL_PATH, "section_title", number="3", icon="🏆",
+                         title="Perangkingan Komoditas & Decision Support System (DSS)"),
+        unsafe_allow_html=True,
+    )
+
+    rankings = []
+    for raw_c in raw_item_list:
+        ton_c, _ = predict_single(area, raw_c, year, rain, temp, pesticide)
+        rankings.append({"crop": CROP_TRANSLATION.get(raw_c, raw_c), "yield_ton": round(ton_c, 2)})
+    rankings.sort(key=lambda x: x["yield_ton"], reverse=True)
+    top_crop, top_yield = rankings[0]["crop"], rankings[0]["yield_ton"]
+
+    st.markdown(render_template(
+        TPL_PATH, "dss_banner",
+        temp=f"{temp:.2f}", rain=f"{rain:,.0f}", area=area,
+        top_crop=top_crop, top_yield=f"{top_yield:,.2f}",
+    ), unsafe_allow_html=True)
+
+    rank_df = pd.DataFrame(rankings).sort_values("yield_ton")  # ascending, biar terbesar di atas saat horizontal
+    max_val = rank_df["yield_ton"].max()
+    fig = go.Figure(go.Bar(
+        x=rank_df["yield_ton"], y=rank_df["crop"], orientation="h",
+        marker=dict(color="rgba(129, 199, 132, 0.85)", line=dict(color="#2E7D32", width=1.5)),
+        text=rank_df["yield_ton"].apply(lambda v: f"{v:,.2f} ton/ha"),
+        textposition="outside",
+        textfont=dict(size=11, color="#166534", family="Outfit"),
+        cliponaxis=False,
+    ))
+    fig.update_layout(
+        height=380, margin=dict(l=10, r=80, t=10, b=10),
+        paper_bgcolor="#ffffff", plot_bgcolor="#ffffff",
+        xaxis=dict(
+            title="Hasil Panen (ton/ha)",
+            gridcolor="#e2e8f0",
+            range=[0, max_val * 1.25],  # beri ruang untuk label di luar bar
+        ),
+        yaxis=dict(tickfont=dict(size=12)),
+        font=dict(family="Outfit"),
+    )
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+else:
+    # Pesan awal sebelum prediksi dijalankan
+    st.markdown(
+        """
+        <div style="
+            margin-top: 2.5rem;
+            padding: 2.5rem;
+            background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+            border: 1.5px dashed #86efac;
+            border-radius: 16px;
+            text-align: center;
+            color: #166534;
+        ">
+            <div style="font-size: 3rem; margin-bottom: 0.75rem;">🌾</div>
+            <h3 style="margin: 0 0 0.5rem 0; font-size: 1.3rem; font-weight: 700;">
+                Siap Memprediksi Hasil Panen!
+            </h3>
+            <p style="margin: 0; font-size: 0.97rem; opacity: 0.85;">
+                Isi parameter agroklimat di atas, lalu klik <strong>Jalankan Prediksi</strong>
+                untuk melihat estimasi hasil panen, analisis sensitivitas, dan perangkingan komoditas.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
