@@ -32,12 +32,19 @@ from utils import get_image_base64, load_css, render_template
 # PATHS
 # ─────────────────────────────────────────────────────────────────────────────
 BASE_DIR   = Path(__file__).parent
-MODEL_PATH = BASE_DIR / "models" / "rf_model.pkl"
+MODEL_PATH = BASE_DIR / "models" / "catboost_lag_model.pkl"
 DATA_PATH  = BASE_DIR / "data" / "yield_df.csv"
 CSS_PATH   = BASE_DIR / "assets" / "style.css"
 TPL_PATH   = BASE_DIR / "assets" / "templates.html"
 LOGO_PATH  = BASE_DIR / "assets" / "logo_small.png"
 BANNER_PATH = BASE_DIR / "assets" / "header_banner.png"
+
+# Fitur yang digunakan model CatBoost
+FEAT_COLS = [
+    "Area", "Item", "Year",
+    "average_rain_fall_mm_per_year", "pesticides_tonnes", "avg_temp",
+    "yield_lag_1", "yield_lag_2", "yield_lag_3",
+]
 
 CROP_TRANSLATION = {
     "Maize": "Jagung",
@@ -67,7 +74,7 @@ load_css(CSS_PATH)
 # ─────────────────────────────────────────────────────────────────────────────
 # LOAD MODEL & DATA REFERENSI (cached)
 # ─────────────────────────────────────────────────────────────────────────────
-@st.cache_resource(show_spinner="Memuat model Random Forest...")
+@st.cache_resource(show_spinner="Memuat model CatBoost...")
 def load_model():
     if not MODEL_PATH.exists():
         st.error(f"⚠️ Model tidak ditemukan: `{MODEL_PATH.name}`. Jalankan cell Deployment di notebook terlebih dahulu.")
@@ -77,6 +84,7 @@ def load_model():
 
 @st.cache_data(show_spinner="Memuat data historis...")
 def load_reference_data():
+    """Muat data dan bangun tabel lag yield terakhir per (Area, Item) untuk prediksi future."""
     if not DATA_PATH.exists():
         st.error(f"⚠️ Dataset tidak ditemukan: `{DATA_PATH.name}`.")
         st.stop()
@@ -84,39 +92,58 @@ def load_reference_data():
     if "Unnamed: 0" in df.columns:
         df = df.drop(columns=["Unnamed: 0"])
 
-    df["log_yield"] = np.log1p(df["hg/ha_yield"])
-    global_mean_ = df["log_yield"].mean()
-    baseline_map_ = df.groupby(["Area", "Item"])["log_yield"].mean().to_dict()
+    # Deduplikasi — ambil satu baris per (Area, Item, Year)
+    df = df.drop_duplicates(subset=["Area", "Item", "Year"]).copy()
+    df = df.sort_values(["Area", "Item", "Year"]).reset_index(drop=True)
+
     area_list_ = sorted(df["Area"].unique().tolist())
     raw_item_list_ = sorted(df["Item"].unique().tolist())
-    item_columns_ = list(pd.get_dummies(df["Item"], prefix="item").columns)
-    return baseline_map_, global_mean_, area_list_, raw_item_list_, item_columns_
+
+    # Tabel lag: 3 nilai hg/ha_yield terakhir per (Area, Item)
+    # Digunakan untuk prediksi tahun proyeksi
+    lag_map_ = (
+        df.groupby(["Area", "Item"])
+        .apply(lambda g: g.sort_values("Year")["hg/ha_yield"].values[-3:][::-1].tolist())
+        .to_dict()
+    )  # lag_map_[(area, item)] = [lag1, lag2, lag3] (terbaru dulu)
+
+    # Rata-rata global hg/ha_yield — fallback jika area/item tidak ada di data
+    global_mean_hg_ = df["hg/ha_yield"].mean()
+
+    return lag_map_, global_mean_hg_, area_list_, raw_item_list_
 
 
 model = load_model()
-baseline_map, global_mean, area_list, raw_item_list, item_columns = load_reference_data()
+lag_map, global_mean_hg, area_list, raw_item_list = load_reference_data()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # FUNGSI PREDIKSI
 # ─────────────────────────────────────────────────────────────────────────────
 def predict_single(area: str, item_raw: str, year: int, rain: float, temp: float, pesticide: float):
-    rainfall_temp = rain * temp
+    """Prediksi menggunakan CatBoost lag model.
+
+    Model menerima lag yield (hg/ha_yield) 3 tahun terakhir dan
+    menghasilkan log1p(hg/ha_yield) yang perlu di-expm1.
+    """
+    lags = lag_map.get((area, item_raw), None)
+    if lags is None or len(lags) < 3:
+        # Fallback: gunakan rata-rata global sebagai lag
+        lags = [global_mean_hg, global_mean_hg, global_mean_hg]
+    lag1, lag2, lag3 = float(lags[0]), float(lags[1]), float(lags[2])
+
     row = {
+        "Area": area,
+        "Item": item_raw,
         "Year": year,
         "average_rain_fall_mm_per_year": rain,
         "pesticides_tonnes": pesticide,
         "avg_temp": temp,
-        "rainfall_temp": rainfall_temp,
+        "yield_lag_1": lag1,
+        "yield_lag_2": lag2,
+        "yield_lag_3": lag3,
     }
-    item_data = {col: 0 for col in item_columns}
-    target_col = f"item_{item_raw}"
-    if target_col in item_data:
-        item_data[target_col] = 1
-
-    x_df = pd.DataFrame([{**row, **item_data}])
-    pred_res = model.predict(x_df)[0]
-    base_log = baseline_map.get((area, item_raw), global_mean)
-    pred_log = base_log + pred_res
+    x_df = pd.DataFrame([row])
+    pred_log = model.predict(x_df)[0]          # output = log1p(hg/ha)
     pred_hg = float(np.expm1(pred_log))
     pred_ton = max(0.0, pred_hg / 10_000)
     return pred_ton, pred_hg
@@ -138,8 +165,8 @@ RED_BAR   = dict(color="rgba(252, 165, 165, 0.85)", line=dict(color="#DC2626", w
 MODEL_RESULTS = {
     "Baseline (Wilayah×Komoditas)": {"r2": 0.8781, "mae": 18581.48},
     "Regresi Linear":               {"r2": 0.9221, "mae": 14519.96},
-    "XGBoost":                      {"r2": 0.9326, "mae": 12982.28},
     "Random Forest":                {"r2": 0.9513, "mae": 10517.10},
+    "CatBoost (Lag)": {"r2": 0.9680, "mae": 7715.09},
 }
 
 LABELS = {
@@ -163,38 +190,54 @@ def load_raw():
 
 @st.cache_data(show_spinner="Mengevaluasi model pada data uji...")
 def compute_model_eval():
-    """Ulang evaluasi notebook: split by tahun (train ≤ 2009), baseline dari train saja,
-    model memprediksi residual log-yield. Mengembalikan data uji + prediksi + importance."""
+    """Evaluasi CatBoost lag model: split by tahun (train ≤ 2009, uji 2010–2013).
+    Lag features dihitung dari data aktual historis.
+    Mengembalikan data uji + prediksi + feature importance."""
     mdl = load_model()
     df = load_raw().copy()
-    df["log_yield"] = np.log1p(df["hg/ha_yield"])
-    train, test = df[df["Year"] <= 2009], df[df["Year"] > 2009].copy()
 
-    bmap = train.groupby(["Area", "Item"])["log_yield"].mean()
-    gmean = train["log_yield"].mean()
-    test["base_log"] = [bmap.get((a, i), gmean) for a, i in zip(test["Area"], test["Item"])]
-    test["rainfall_temp"] = test["average_rain_fall_mm_per_year"] * test["avg_temp"]
+    # Deduplikasi dan urutkan
+    df = df.drop_duplicates(subset=["Area", "Item", "Year"]).copy()
+    df = df.sort_values(["Area", "Item", "Year"]).reset_index(drop=True)
 
-    feat = list(mdl.feature_names_in_)
-    items = pd.get_dummies(test["Item"], prefix="item").reindex(
-        columns=[c for c in feat if c.startswith("item_")], fill_value=0)
-    X = pd.concat([test[["Year", "average_rain_fall_mm_per_year", "pesticides_tonnes",
-                         "avg_temp", "rainfall_temp"]], items], axis=1)[feat]
+    # Buat lag features dari raw hg/ha_yield
+    for lag in [1, 2, 3]:
+        df[f"yield_lag_{lag}"] = df.groupby(["Area", "Item"])["hg/ha_yield"].shift(lag)
 
-    test["pred_ton"] = np.clip(np.expm1(test["base_log"].values + mdl.predict(X)), 0, None) / 10_000
-    test["base_ton"] = np.clip(np.expm1(test["base_log"].values), 0, None) / 10_000
+    test = df[(df["Year"] > 2009) & (df["Year"] <= 2013)].dropna(
+        subset=["yield_lag_1", "yield_lag_2", "yield_lag_3"]
+    ).copy()
+
+    X_test = test[FEAT_COLS]
+    preds_log = mdl.predict(X_test)                         # log1p(hg/ha)
+    test["pred_ton"] = np.clip(np.expm1(preds_log), 0, None) / 10_000
     test["error_ton"] = test["pred_ton"] - test["yield_ton"]
     test["abs_error"] = test["error_ton"].abs()
 
-    # importance: gabungkan semua dummy komoditas jadi satu
+    # Baseline sederhana: rata-rata historis per (Area, Item) dari data train
+    train = df[df["Year"] <= 2009].copy()
+    bmap = train.groupby(["Area", "Item"])["hg/ha_yield"].mean()
+    gmean_hg = train["hg/ha_yield"].mean()
+    test["base_ton"] = [
+        bmap.get((a, i), gmean_hg) / 10_000
+        for a, i in zip(test["Area"], test["Item"])
+    ]
+
+    # Feature importance
+    feat = list(mdl.feature_names_)          # CatBoost pakai feature_names_ bukan feature_names_in_
     imp = pd.Series(mdl.feature_importances_, index=feat)
-    item_imp = imp[[c for c in feat if c.startswith("item_")]].sum()
-    imp = imp[[c for c in feat if not c.startswith("item_")]]
-    imp.index = ["Curah hujan" if "rain" in i and "temp" not in i else
-                 "Interaksi hujan × suhu" if i == "rainfall_temp" else
-                 "Pestisida" if "pest" in i else
-                 "Suhu" if i == "avg_temp" else "Tahun" for i in imp.index]
-    imp["Jenis komoditas"] = item_imp
+    label_map = {
+        "Area": "Wilayah",
+        "Item": "Jenis komoditas",
+        "Year": "Tahun",
+        "average_rain_fall_mm_per_year": "Curah hujan",
+        "pesticides_tonnes": "Pestisida",
+        "avg_temp": "Suhu",
+        "yield_lag_1": "Hasil panen (lag 1 thn)",
+        "yield_lag_2": "Hasil panen (lag 2 thn)",
+        "yield_lag_3": "Hasil panen (lag 3 thn)",
+    }
+    imp.index = [label_map.get(i, i) for i in imp.index]
     return test, imp.sort_values()
 
 
@@ -356,15 +399,15 @@ def render_overview():
             "target pemodelan.")
 
     # ── 3. Insight model ─────────────────────────────────────────────────────
-    section("3", "🤖", "Insight Pemodelan (Random Forest)")
+    section("3", "🤖", "Insight Pemodelan (CatBoost Lag)")
     r2_rf = 1 - ((test["yield_ton"] - test["pred_ton"]) ** 2).sum() / ((test["yield_ton"] - test["yield_ton"].mean()) ** 2).sum()
     r2_bs = 1 - ((test["yield_ton"] - test["base_ton"]) ** 2).sum() / ((test["yield_ton"] - test["yield_ton"].mean()) ** 2).sum()
     mae_rf = test["abs_error"].mean()
 
     c1, c2, c3, c4 = st.columns(4)
     for col, cls, title, val in [
-        (c1, "green-box", "R² Random Forest (data uji)", f"{r2_rf:.4f}"),
-        (c2, "blue-box", "MAE Random Forest", f"{mae_rf:.2f} ton/ha"),
+        (c1, "green-box", "R² CatBoost (data uji)", f"{r2_rf:.4f}"),
+        (c2, "blue-box", "MAE CatBoost", f"{mae_rf:.2f} ton/ha"),
         (c3, "info-box", "R² Baseline", f"{r2_bs:.4f}"),
         (c4, "green-box", "Tambahan R² dari ML", f"+{r2_rf - r2_bs:.4f}"),
     ]:
@@ -426,12 +469,12 @@ def render_overview():
 
     fig = go.Figure(go.Bar(x=importance.values, y=importance.index, orientation="h", marker=GREEN_BAR,
                            text=[f"{v:.1%}" for v in importance.values], textposition="outside", cliponaxis=False))
-    style_fig(fig, height=330, title="Feature importance Random Forest (pada residual)", legend=False)
+    style_fig(fig, height=360, title="Feature importance CatBoost Lag Model", legend=False)
     fig.update_layout(margin=dict(l=10, r=60, t=50, b=10))
     fig.update_xaxes(range=[0, importance.max() * 1.2], title="Kontribusi relatif")
     show(fig)
-    caption("Random Forest memodelkan <b>residual</b> di atas baseline wilayah×komoditas. Jadi grafik ini menunjukkan "
-            "faktor yang menjelaskan sisa variasi, bukan seluruh variasi hasil panen.")
+    caption("Model CatBoost menggunakan lag yield 3 tahun terakhir sebagai fitur utama, "
+            "mencerminkan bahwa hasil panen tahun lalu adalah prediktor terkuat untuk tahun berikutnya.")
 
     # ── 4. Eksplorasi interaktif ─────────────────────────────────────────────
     section("4", "🧭", "Eksplorasi Negara & Komoditas")
