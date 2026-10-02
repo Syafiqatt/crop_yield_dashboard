@@ -319,3 +319,59 @@ div.stButton > button:hover, div[data-testid="stForm"] button:hover {
 
 /* Hide Streamlit default chrome */
 #MainMenu, footer, header { visibility: hidden; }
+
+
+/* =============================================================
+   Halaman Overview — tab, kartu grafik, catatan
+   ============================================================= */
+
+/* Tab navigasi */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 8px;
+    border-bottom: 2px solid var(--border-color);
+}
+.stTabs [data-baseweb="tab"] {
+    height: 46px;
+    padding: 0 22px;
+    border-radius: 12px 12px 0 0;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+.stTabs [aria-selected="true"] {
+    color: var(--primary-color) !important;
+    background: var(--primary-light);
+}
+.stTabs [data-baseweb="tab-highlight"] {
+    background-color: var(--primary-color) !important;
+}
+
+/* Grafik tampil sebagai kartu putih */
+div[data-testid="stPlotlyChart"] {
+    background: #FFFFFF;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 8px 10px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+    margin-bottom: 0.4rem;
+}
+
+/* Keterangan kecil di bawah grafik / section */
+.chart-caption {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin: 0 0 1rem 4px;
+    line-height: 1.5;
+}
+
+/* Kotak catatan / keterbatasan */
+.note-box {
+    background: #FFFBEB;
+    border: 1px solid #FDE68A;
+    border-left: 5px solid #F59E0B;
+    border-radius: 14px;
+    padding: 18px 22px;
+    margin: 1rem 0 1.4rem 0;
+    color: #78350F;
+}
+.note-box h4 { margin: 0 0 8px 0; font-size: 1.05rem; font-weight: 700; }
+.note-box p  { margin: 0; font-size: 0.95rem; line-height: 1.6; color: #92400E; }
