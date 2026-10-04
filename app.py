@@ -564,22 +564,21 @@ def render_prediction():
         
             area = st.selectbox("1. Wilayah (Negara)", area_list, index=default_area_idx)
             item_indo = st.selectbox("2. Komoditas Utama", items_indo, index=default_item_idx)
-            years_list = list(range(2027, 2046))
-            year = st.selectbox("3. Tahun Proyeksi:", options=years_list, index=0)
-            rain = st.number_input("4. Curah Hujan (mm/tahun)", value=1485.0, step=10.0)
-            temp = st.number_input("5. Suhu Rata-rata (°C)", value=16.37, step=0.1, format="%.2f")
-            pesticide = st.number_input("6. Penggunaan Pestisida (Ton)", value=121.0, step=1.0)
+            rain = st.number_input("3. Curah Hujan (mm/tahun)", value=1485.0, step=10.0)
+            temp = st.number_input("4. Suhu Rata-rata (°C)", value=16.37, step=0.1, format="%.2f")
+            pesticide = st.number_input("5. Penggunaan Pestisida (Ton)", value=121.0, step=1.0)
 
             submitted = st.form_submit_button("Jalankan Prediksi", use_container_width=True)
 
     item_raw = CROP_REVERSE.get(item_indo, item_indo)
+    year = 2013  # Default tahun historis acuan model
 
     # Tandai bahwa form sudah pernah disubmit menggunakan session_state
     if submitted:
         st.session_state["prediction_done"] = True
         st.session_state["pred_params"] = {
             "area": area, "item_raw": item_raw, "item_indo": item_indo,
-            "year": year, "rain": rain, "temp": temp, "pesticide": pesticide,
+            "rain": rain, "temp": temp, "pesticide": pesticide,
         }
 
     # ─────────────────────────────────────────────────────────────────────────────
@@ -589,10 +588,10 @@ def render_prediction():
         p = st.session_state["pred_params"]
         area      = p["area"]
         item_raw  = p["item_raw"]
-        year      = p["year"]
         rain      = p["rain"]
         temp      = p["temp"]
         pesticide = p["pesticide"]
+        year      = 2013
 
         # ── OUTPUT 1 — PREDIKSI UTAMA ────────────────────────────────────────────
         y_ton, y_hg = predict_single(area, item_raw, year, rain, temp, pesticide)
@@ -610,7 +609,7 @@ def render_prediction():
                                          title="Satuan Standar FAO", value=f"{y_hg:,.0f} hg/ha"), unsafe_allow_html=True)
         with c3:
             st.markdown(render_template(TPL_PATH, "metric_card", box_class="info-box",
-                                         title="Lokasi & Tahun", value=f"{area} ({year})"), unsafe_allow_html=True)
+                                         title="Wilayah Terpilih", value=f"{area}"), unsafe_allow_html=True)
 
         # ── OUTPUT 2 — ANALISIS SENSITIVITAS ─────────────────────────────────────
         st.markdown(
