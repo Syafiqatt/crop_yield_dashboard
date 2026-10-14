@@ -287,7 +287,6 @@ def hbar(series, title, bar_style, fmt="{:.2f}", xlabel="Rata-rata Hasil Panen (
 
 def render_overview():
     df_all = load_raw()
-    test, importance = compute_model_eval()
 
     # ── Filter global ────────────────────────────────────────────────────────
     f1, f2 = st.columns([1, 2])
@@ -321,20 +320,6 @@ def render_overview():
 
     by_item = df.groupby("Komoditas")["yield_ton"].mean().sort_values(ascending=False)
     by_area = df.groupby("Area")["yield_ton"].mean().sort_values(ascending=False)
-    corr_y = df[["Year", "average_rain_fall_mm_per_year", "pesticides_tonnes", "avg_temp", "yield_ton"]] \
-        .corr()["yield_ton"].drop("yield_ton")
-    max_r = corr_y.abs().max()
-    kekuatan = "sangat lemah" if max_r < 0.2 else "lemah" if max_r < 0.4 else "sedang"
-    body = (f"Pada periode <b>{yr[0]}–{yr[1]}</b>, "
-            + (f"komoditas dengan rata-rata hasil panen tertinggi adalah <b>{by_item.index[0]}</b> "
-               f"(<b>{by_item.iloc[0]:.1f} ton/ha</b>), " if komo == "Semua Komoditas" else
-               f"rata-rata hasil panen <b>{komo}</b> adalah <b>{by_item.iloc[0]:.1f} ton/ha</b>, ")
-            + f"dan negara tertinggi adalah <b>{by_area.index[0]}</b> (<b>{by_area.iloc[0]:.1f} ton/ha</b>). "
-            f"Korelasi linear faktor numerik (tahun, hujan, suhu, pestisida) dengan hasil panen tergolong "
-            f"<b>{kekuatan}</b> (|r| maksimum = {max_r:.2f}), sehingga wilayah dan jenis tanaman "
-            f"menjadi penentu utama produktivitas.")
-    st.markdown(render_template(TPL_PATH, "insight_banner", title="💡 Ringkasan Insight", body=body),
-                unsafe_allow_html=True)
 
     # ── 2. Insight data ──────────────────────────────────────────────────────
     section("2", "🔎", "Insight dari Data Historis")
@@ -398,86 +383,8 @@ def render_overview():
     caption("Distribusi asli miring ke kanan; transformasi log membuatnya lebih simetris sehingga cocok sebagai "
             "target pemodelan.")
 
-    # ── 3. Insight model ─────────────────────────────────────────────────────
-    section("3", "🤖", "Insight Pemodelan (CatBoost Lag)")
-    r2_rf = 1 - ((test["yield_ton"] - test["pred_ton"]) ** 2).sum() / ((test["yield_ton"] - test["yield_ton"].mean()) ** 2).sum()
-    r2_bs = 1 - ((test["yield_ton"] - test["base_ton"]) ** 2).sum() / ((test["yield_ton"] - test["yield_ton"].mean()) ** 2).sum()
-    mae_rf = test["abs_error"].mean()
-
-    c1, c2, c3, c4 = st.columns(4)
-    for col, cls, title, val in [
-        (c1, "green-box", "R² CatBoost (data uji)", f"{r2_rf:.4f}"),
-        (c2, "blue-box", "MAE CatBoost", f"{mae_rf:.2f} ton/ha"),
-        (c3, "info-box", "R² Baseline", f"{r2_bs:.4f}"),
-        (c4, "green-box", "Tambahan R² dari ML", f"+{r2_rf - r2_bs:.4f}"),
-    ]:
-        with col:
-            st.markdown(render_template(TPL_PATH, "metric_card", box_class=cls, title=title, value=val),
-                        unsafe_allow_html=True)
-
-    names = list(MODEL_RESULTS)
-    a, b = st.columns(2)
-    with a:
-        fig = go.Figure(go.Bar(x=names, y=[MODEL_RESULTS[n]["r2"] for n in names], marker=GREEN_BAR,
-                               text=[f"{MODEL_RESULTS[n]['r2']:.4f}" for n in names], textposition="outside",
-                               cliponaxis=False))
-        style_fig(fig, height=360, title="Perbandingan R² (lebih tinggi lebih baik)", legend=False)
-        fig.update_yaxes(range=[0.8, 1.0])
-        fig.update_xaxes(tickfont=dict(size=10))
-        show(fig)
-    with b:
-        fig = go.Figure(go.Bar(x=names, y=[MODEL_RESULTS[n]["mae"] / 10_000 for n in names], marker=BLUE_BAR,
-                               text=[f"{MODEL_RESULTS[n]['mae'] / 10_000:.2f}" for n in names],
-                               textposition="outside", cliponaxis=False))
-        style_fig(fig, height=360, title="Perbandingan MAE, ton/ha (lebih rendah lebih baik)", legend=False)
-        fig.update_yaxes(range=[0, 2.3])
-        fig.update_xaxes(tickfont=dict(size=10))
-        show(fig)
-    caption("Sumbu R² dipotong mulai 0,80 agar selisih antar model terlihat. Baseline sederhana "
-            "(rata-rata historis per wilayah×komoditas) sudah menjelaskan ±88% variasi; machine learning "
-            "menambah sekitar 7 poin persentase.")
-
-    a, b = st.columns(2)
-    with a:
-        samp = test.sample(min(len(test), 2000), random_state=42)
-        lim = float(max(samp["yield_ton"].max(), samp["pred_ton"].max()))
-        fig = px.scatter(samp, x="yield_ton", y="pred_ton", opacity=0.45, hover_data=["Area", "Komoditas", "Year"],
-                         labels={"yield_ton": "Aktual (ton/ha)", "pred_ton": "Prediksi (ton/ha)"},
-                         color_discrete_sequence=["#2E7D32"])
-        fig.add_trace(go.Scatter(x=[0, lim], y=[0, lim], mode="lines", line=dict(dash="dash", color="#DC2626"),
-                                 name="Prediksi = Aktual"))
-        style_fig(fig, height=380, title="Aktual vs prediksi (data uji 2010–2013)", legend=False)
-        show(fig)
-    with b:
-        fig = go.Figure(go.Histogram(x=test["error_ton"].clip(-8, 8), nbinsx=60, marker_color="#81C784"))
-        style_fig(fig, height=380, title="Distribusi galat (prediksi − aktual, ton/ha)", legend=False)
-        fig.add_vline(x=0, line_dash="dash", line_color="#DC2626")
-        show(fig)
-    caption("Titik di dekat garis putus-putus berarti prediksi akurat. Galat terpusat di sekitar nol; "
-            "galat dipotong di ±8 ton/ha pada histogram agar mudah dibaca.")
-
-    a, b = st.columns(2)
-    with a:
-        err_item = test.groupby("Komoditas")["abs_error"].mean()
-        show(hbar(err_item, "MAE per komoditas (ton/ha)", BLUE_BAR, xlabel="MAE (ton/ha)", height=380))
-    with b:
-        cnt = test.groupby("Area")["abs_error"].agg(["mean", "count"])
-        err_area = cnt[cnt["count"] >= 20]["mean"].sort_values(ascending=False).head(10)
-        show(hbar(err_area, "10 negara dengan galat terbesar (ton/ha)", RED_BAR, xlabel="MAE (ton/ha)", height=380))
-    caption("Galat mutlak cenderung lebih besar pada komoditas dengan hasil panen tinggi (mis. kentang). "
-            "Gunakan grafik ini untuk melihat di mana prediksi perlu diperlakukan lebih hati-hati.")
-
-    fig = go.Figure(go.Bar(x=importance.values, y=importance.index, orientation="h", marker=GREEN_BAR,
-                           text=[f"{v:.1%}" for v in importance.values], textposition="outside", cliponaxis=False))
-    style_fig(fig, height=360, title="Feature importance CatBoost Lag Model", legend=False)
-    fig.update_layout(margin=dict(l=10, r=60, t=50, b=10))
-    fig.update_xaxes(range=[0, importance.max() * 1.2], title="Kontribusi relatif")
-    show(fig)
-    caption("Model CatBoost menggunakan lag yield 3 tahun terakhir sebagai fitur utama, "
-            "mencerminkan bahwa hasil panen tahun lalu adalah prediktor terkuat untuk tahun berikutnya.")
-
-    # ── 4. Eksplorasi interaktif ─────────────────────────────────────────────
-    section("4", "🧭", "Eksplorasi Negara & Komoditas")
+    # ── 3. Eksplorasi interaktif ─────────────────────────────────────────────
+    section("3", "🧭", "Eksplorasi Negara & Komoditas")
     e1, e2 = st.columns(2)
     with e1:
         areas = sorted(df_all["Area"].unique())
@@ -490,17 +397,11 @@ def render_overview():
     item_raw = CROP_REVERSE.get(komo_sel, komo_sel)
 
     hist = df_all[(df_all["Area"] == area) & (df_all["Item"] == item_raw)].sort_values("Year")
-    pred = test[(test["Area"] == area) & (test["Item"] == item_raw)].sort_values("Year")
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=hist["Year"], y=hist["yield_ton"], mode="lines+markers", name="Aktual",
                              line=dict(color="#2E7D32", width=2.5)))
-    if not pred.empty:
-        fig.add_trace(go.Scatter(x=pred["Year"], y=pred["pred_ton"], mode="lines+markers", name="Prediksi model (data uji)",
-                                 line=dict(color="#DC2626", dash="dash", width=2)))
-        fig.add_vrect(x0=2009.5, x1=2013.5, fillcolor="#FEF3C7", opacity=0.4, line_width=0,
-                      annotation_text="Periode uji", annotation_position="top left")
-    style_fig(fig, height=360, title=f"Hasil panen {komo_sel} di {area}: aktual vs prediksi")
+    style_fig(fig, height=360, title=f"Hasil panen {komo_sel} di {area}: tren historis")
     fig.update_yaxes(title="ton/ha")
     show(fig)
 
@@ -529,15 +430,7 @@ def render_overview():
             f"dengan satu variabel diubah. Kurva yang hampir datar berarti model tidak sensitif terhadap variabel itu "
             f"untuk kombinasi ini.")
 
-    # ── Catatan ──────────────────────────────────────────────────────────────
-    st.markdown(render_template(
-        TPL_PATH, "note_box", title="⚠️ Catatan & Keterbatasan",
-        body=("Data hanya mencakup 1990–2013 dan curah hujan serta suhu adalah rata-rata tahunan per negara, "
-              "sehingga variasi antarwilayah di dalam negara tidak tertangkap. Model dievaluasi dengan split berdasarkan "
-              "waktu (latih 1990–2009, uji 2010–2013). Karena Random Forest tidak mengekstrapolasi, prediksi untuk tahun "
-              "proyeksi jauh (mis. 2027–2045) praktis mengikuti pola tahun terakhir data, bukan tren baru. "
-              "Hubungan yang tampak bersifat asosiatif, bukan sebab-akibat."),
-    ), unsafe_allow_html=True)
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
